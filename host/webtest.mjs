@@ -127,10 +127,18 @@ async function main() {
   const shots = [await screenshot('web-idle')];
   const desktopScroll = await scroll();
 
+  const t0 = Date.now();
   await evaluate(`document.getElementById('start-button').click()`);
-  await sleep(2500);
+  // Starting renders the test loops; wait until the power button shows a rate.
+  let startMs = -1;
+  for (let i = 0; i < 100; i++) {
+    if (/kHz/.test(await evaluate(`document.getElementById('power-label').textContent`))) { startMs = Date.now() - t0; break; }
+    await sleep(100);
+  }
+  await sleep(1000);
   const results = {};
   results.started = await evaluate(`({ power: document.getElementById('power-label').textContent, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent })`);
+  results.started.ms = startMs;
   const rect = await evaluate(`(() => { const r = document.getElementById('pad').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
   const at = (fx, fy) => [rect.x + fx * rect.w, rect.y + (1 - fy) * rect.h];
 

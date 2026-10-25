@@ -5,7 +5,7 @@
 // and ?src=<id> the input loop (kept up to date, so the address bar is always a
 // link to the current sound); ?embed=1 drops the page chrome for iframes.
 
-import { SOURCES, renderSources } from './sources.js';
+import { SOURCES, renderSource } from './sources.js';
 
 const UNITS = [
   {
@@ -163,7 +163,6 @@ const state = {
   out: null,
   analyser: null,
   input: null,
-  buffers: null,
   source: { id: null, node: null, stream: null },
   file: null,
   startSource: [...SOURCES.map((s) => s.id), 'silence'].includes(params.get('src')) ? params.get('src') : null,
@@ -447,10 +446,11 @@ async function startAudio() {
     node.port.onmessage = (e) => onWorkletMessage(e.data);
     Object.assign(state, { ctx, node, input, out, analyser });
     applyVolume();
-    state.buffers = await renderSources(ctx.sampleRate);
     await loadUnitAudio();
     await ctx.resume();
-    selectSource(state.startSource || state.unit.source);
+    await selectSource(state.startSource || state.unit.source);
+    // The other loops render in the background.
+    SOURCES.forEach((s) => renderSource(ctx.sampleRate, s.id));
     $('start').hidden = true;
     $('record').disabled = false;
     updatePower();
@@ -517,7 +517,7 @@ async function selectSource(id) {
     state.source = { id, node: null, stream: null };
     note = state.unit.id === 'resonator' ? 'Silence: tap the pad to pluck.' : 'No input.';
   } else {
-    const buffer = id === 'file' ? state.file.buffer : state.buffers[id];
+    const buffer = id === 'file' ? state.file.buffer : await renderSource(state.ctx.sampleRate, id);
     const node = new AudioBufferSourceNode(state.ctx, { buffer, loop: true });
     node.connect(state.input);
     node.start();
