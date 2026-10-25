@@ -157,16 +157,20 @@ function buildPlucks(ctx) {
 }
 
 // Eight seconds of filtered noise swelling twice, a good resonator exciter.
+// The swell is a gain curve rather than an LFO connected to the gain: audio
+// extensions that wrap AudioNode.connect (Mimi, EQ add-ons) break connections
+// to an AudioParam.
 function buildNoise(ctx) {
   const src = new AudioBufferSourceNode(ctx, { buffer: noiseBuffer(ctx, 9, 11) });
   const color = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 2600, Q: 0.5 });
-  const amp = new GainNode(ctx, { gain: 0.35 });
-  const lfo = new OscillatorNode(ctx, { type: 'sine', frequency: 0.25 });
-  const depth = new GainNode(ctx, { gain: 0.3 });
-  lfo.connect(depth).connect(amp.gain);
+  const amp = new GainNode(ctx, { gain: 0 });
+  const swell = new Float32Array(257);
+  for (let i = 0; i < swell.length; i++) {
+    swell[i] = 0.35 + 0.3 * Math.sin((2 * Math.PI * 2 * i) / (swell.length - 1));
+  }
+  amp.gain.setValueCurveAtTime(swell, 0, 8);
   src.connect(color).connect(amp).connect(ctx.destination);
   src.start(0);
-  lfo.start(0);
 }
 
 export const SOURCES = [

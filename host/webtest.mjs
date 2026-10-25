@@ -113,6 +113,14 @@ async function main() {
   await send('Runtime.enable');
   await send('Log.enable');
   await send('Page.enable');
+  // Audio extensions (Mimi, EQ add-ons) wrap AudioNode.prototype.connect and
+  // forward all three arguments. That changes how the browser resolves the
+  // connect() overloads, so the page has to work under such a wrapper too.
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+    const original = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (destination, output, input) {
+      return original.call(this, destination, output, input);
+    };` });
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 820, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: `${url}?unit=resonator` });
   await sleep(1500);
@@ -122,6 +130,7 @@ async function main() {
   await evaluate(`document.getElementById('start-button').click()`);
   await sleep(2500);
   const results = {};
+  results.started = await evaluate(`({ power: document.getElementById('power-label').textContent, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent })`);
   const rect = await evaluate(`(() => { const r = document.getElementById('pad').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
   const at = (fx, fy) => [rect.x + fx * rect.w, rect.y + (1 - fy) * rect.h];
 
