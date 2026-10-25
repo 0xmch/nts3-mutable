@@ -19,6 +19,11 @@ const UNITS = [
     how: 'Touch to freeze the buffer and drag to scrub through it; release to let new audio in. X is the position, Y the grain size. With Density at 50%, each tap plays one grain.',
   },
   {
+    id: 'texture_lofi', title: 'Texture Lo-Fi', short: 'Lo-Fi', module: 'Clouds · lo-fi', source: 'chords', touchLabel: 'freeze',
+    blurb: "Clouds' granular mode in its lo-fi quality: mono, 8-bit mu-law samples at 16 kHz, with about seven seconds of buffer.",
+    how: 'Same controls as Texture: touch to freeze and scrub, X is the position, Y the grain size. Position reaches further back.',
+  },
+  {
     id: 'texture_stretch', title: 'Texture Stretch', short: 'Stretch', module: 'Clouds · stretch', source: 'chords', touchLabel: 'freeze',
     blurb: 'Time-stretches and pitch-shifts the last second of input with WSOLA (waveform-similarity overlap-add).',
     how: 'Touch to freeze, then drag X through the frozen second. Y sets the window size, Density adds diffusion, and Texture sweeps a low-pass or high-pass filter.',

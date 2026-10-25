@@ -142,7 +142,7 @@ async function main() {
   const rect = await evaluate(`(() => { const r = document.getElementById('pad').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
   const at = (fx, fy) => [rect.x + fx * rect.w, rect.y + (1 - fy) * rect.h];
 
-  for (const [n, id] of [['1', 'resonator'], ['2', 'texture'], ['3', 'texture_stretch'], ['4', 'texture_loop'], ['5', 'metamod'], ['6', 'freq_shifter']]) {
+  for (const [n, id] of [['1', 'resonator'], ['2', 'texture'], ['3', 'texture_lofi'], ['4', 'texture_stretch'], ['5', 'texture_loop'], ['6', 'metamod'], ['7', 'freq_shifter']]) {
     await key(n);
     await sleep(1200);
     const before = await meters();

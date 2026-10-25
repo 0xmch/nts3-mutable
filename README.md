@@ -23,9 +23,11 @@ With audio on the input, the input excites the resonator and its transients
 strum too. With nothing on the input, the internal exciter plucks on touch, so
 headphones are all you need. Rings is mono in, stereo (odd/even) out.
 
-### Texture, Texture Stretch, Texture Loop (Clouds)
+### Texture, Texture Lo-Fi, Texture Stretch, Texture Loop (Clouds)
 
-One unit per Clouds playback mode: granular, stretch (WSOLA) and looping delay.
+One unit per Clouds playback mode: granular, stretch (WSOLA) and looping delay,
+plus Texture Lo-Fi: granular in Clouds' mono 8-bit quality (mu-law samples, a
+16 kHz internal rate, about 7 s of buffer).
 
 | Control | Parameter |
 |---|---|
@@ -41,8 +43,8 @@ filter, as on the module.
 
 Clouds runs at its native 32 kHz between 48/32 kHz resamplers (flat to 13 kHz,
 86 dB down from 17 kHz, about 2.6 ms of latency on the wet signal only). The
-dry signal stays at 48 kHz and passes untouched. Quality is fixed at 16-bit
-stereo with the module's 1 s buffer and stereo spread at 50%. The spectral mode
+dry signal stays at 48 kHz and passes untouched. Quality is 16-bit stereo with the
+module's 1 s buffer (mono 8-bit for Texture Lo-Fi), stereo spread at 50%. The spectral mode
 is not built: it does a whole FFT frame in one call, which a render callback
 cannot absorb.
 

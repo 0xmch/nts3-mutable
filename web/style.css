@@ -69,9 +69,12 @@ button { font: inherit; color: inherit; }
 .brand-dot { flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--grad); box-shadow: 0 0 16px rgba(125, 207, 255, .7); }
 .brand-name { font: 600 14.5px var(--mono); color: var(--fg); white-space: nowrap; }
 .units {
-  grid-area: units; display: flex; gap: 3px; padding: 3px; border-radius: 12px;
-  background: var(--well); border: 1px solid var(--line);
+  grid-area: units; display: flex; gap: 3px; padding: 3px; border-radius: 12px; min-width: 0;
+  background: var(--well); border: 1px solid var(--line); overflow-x: auto; scrollbar-width: none;
 }
+.units::-webkit-scrollbar { display: none; }
+.unit-tab { flex: none; }
+body.embed .brand-name { display: none; }
 .unit-tab {
   display: grid; justify-items: center; padding: 5px 16px 6px; border-radius: 9px; border: 1px solid transparent;
   background: transparent; cursor: pointer; transition: background .15s, color .15s;
@@ -257,7 +260,7 @@ body.embed .fullpage { display: inline; }
   :root { --knob: 44px; --gap: 10px; }
   body { font-size: 14px; }
   .appbar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand end" "units units"; padding: 8px 12px; row-gap: 8px; }
-  .units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .units { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
   .unit-tab { padding: 5px 4px 6px; }
   .bar { flex-wrap: wrap; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
   .sources { flex-basis: 100%; }

@@ -26,6 +26,9 @@
 #ifndef TEXTURE_MODE
 #define TEXTURE_MODE 0  // clouds::PLAYBACK_MODE_GRANULAR
 #endif
+#ifndef TEXTURE_QUALITY
+#define TEXTURE_QUALITY 0
+#endif
 
 namespace texture {
 constexpr size_t Align(size_t size) { return (size + 7) & ~size_t(7); }
@@ -90,7 +93,9 @@ class Effect : public Processor {
                      texture::kSmallBufferSize);
     processor_->set_silence(false);
     processor_->set_bypass(false);
-    processor_->set_quality(0);  // 16-bit stereo
+    // Clouds' quality: 0 is 16-bit stereo; 3 (Texture Lo-Fi) is mono, 8-bit
+    // mu-law samples and a 16 kHz internal rate, with a longer buffer.
+    processor_->set_quality(TEXTURE_QUALITY);
     processor_->set_playback_mode(
         static_cast<clouds::PlaybackMode>(TEXTURE_MODE));
 

@@ -1,0 +1,6 @@
+0.0 param 2 1000
+2.0 touch began
+2.0 param 0 0
+3.0 param 0 500
+4.0 param 0 1000
+5.0 touch ended

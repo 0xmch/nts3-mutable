@@ -35,6 +35,7 @@
 // Derived from the logue SDK dummy-genericfx template (BSD 3-Clause, KORG).
 // TEXTURE_MODE picks the Clouds playback mode, and with it the unit's name, ID
 // and Density default (Density is the diffusion amount outside granular mode).
+// TEXTURE_QUALITY 3 (granular only) is Clouds' mono 8-bit lo-fi quality.
 
 #include "unit_genericfx.h"
 
@@ -42,7 +43,17 @@
 #define TEXTURE_MODE 0
 #endif
 
-#if TEXTURE_MODE == 0
+#ifndef TEXTURE_QUALITY
+#define TEXTURE_QUALITY 0
+#endif
+
+#if TEXTURE_MODE == 0 && TEXTURE_QUALITY == 3
+#define TEXTURE_NAME "Texture Lo-Fi"
+#define TEXTURE_UNIT_ID 0x7U
+#define TEXTURE_DENSITY_INIT 700
+#elif TEXTURE_QUALITY != 0
+#error "only the granular mode has a lo-fi unit"
+#elif TEXTURE_MODE == 0
 #define TEXTURE_NAME "Texture"
 #define TEXTURE_UNIT_ID 0x2U
 #define TEXTURE_DENSITY_INIT 700
