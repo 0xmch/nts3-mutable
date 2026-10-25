@@ -12,4 +12,9 @@ Files are verbatim except:
   upstream master since 2023-03-13 (merge d1d8839c11 of fbb53ba24b and
   0e3756fd56, which each dropped one copy of a duplicated line) Clouds' stretch
   mode never starts a window and stays silent. The 2015 firmware has the line.
-- clouds/drivers/debug_pin.h: an empty stand-in for the STM32 profiling pin.
+- clouds/drivers/debug_pin.h, warps/drivers/debug_pin.h: empty stand-ins for
+  the STM32 profiling pin.
+- warps/resources.{h,cc}: lut_sin, the cross-fade, MIDI-to-frequency and wave
+  tables are pointers filled at init in SDRAM; lut_bipolar_fold (measured
+  data) ships as Q15 second differences in 8 bits, decoded at init, within
+  1.4e-5 of the original.

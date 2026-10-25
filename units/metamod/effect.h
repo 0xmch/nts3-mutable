@@ -46,6 +46,19 @@ constexpr size_t kFifoPrefill = kBlockOut;
 // 6x oversampling (measured with host/harness).
 constexpr size_t kDryDelay = 75;
 constexpr size_t kDrySize = 128;
+
+// Working buffers. They live in SDRAM with Warps itself: the unit image (code,
+// data and RAM) is capped at about 32 KB.
+struct State {
+  mi_glue::Upsampler2<kTaps> up;
+  mi_glue::Downsampler2<kTaps> down;
+  warps::ShortFrame block_in[kBlock];
+  warps::ShortFrame block_out[kBlock];
+  float fifo_l[kFifoSize];
+  float fifo_r[kFifoSize];
+  float dry_l[kDrySize];
+  float dry_r[kDrySize];
+};
 }  // namespace metamod
 
 class Effect : public Processor {
@@ -58,7 +71,9 @@ class Effect : public Processor {
 
   static constexpr size_t kSdramBytes =
       metamod::Align(sizeof(warps::Modulator)) +
+      metamod::Align(sizeof(metamod::State)) +
       metamod::Align(LUT_SIN_SIZE * sizeof(float)) +
+      metamod::Align((LUT_MIDI_TO_F_HIGH_SIZE + LUT_MIDI_TO_F_LOW_SIZE) * sizeof(float)) +
       metamod::Align(2 * LUT_XFADE_IN_SIZE * sizeof(float)) +
       metamod::Align(LUT_BIPOLAR_FOLD_SIZE * sizeof(float)) +
       metamod::Align(6 * WAV_SINE_I_SIZE * sizeof(float));
@@ -71,6 +86,8 @@ class Effect : public Processor {
     uint8_t* p = reinterpret_cast<uint8_t*>(allocated_buffer);
     modulator_ = new (p) warps::Modulator();
     p += metamod::Align(sizeof(warps::Modulator));
+    s_ = new (p) metamod::State();
+    p += metamod::Align(sizeof(metamod::State));
     p = BuildTables(p);
 
     modulator_->Init(96000.0f);
@@ -87,8 +104,8 @@ class Effect : public Processor {
 
     float prototype[metamod::kTaps];
     mi_glue::DesignPrototype(prototype, metamod::kTaps, 21500.0f);
-    up_.Init(prototype);
-    down_.Init(prototype);
+    s_->up.Init(prototype);
+    s_->down.Init(prototype);
 
     for (int i = 0; i < NUM_PARAMS; ++i) {
       setParameter(i, unit_header.common.params[i].init);
@@ -98,16 +115,20 @@ class Effect : public Processor {
     reset();
   }
 
-  void teardown() override final { modulator_ = nullptr; }
+  void teardown() override final {
+    modulator_ = nullptr;
+    s_ = nullptr;
+  }
 
   void reset() override final {
+    if (!s_) return;
     n_in_ = 0;
     fifo_read_ = 0;
     fifo_write_ = metamod::kFifoPrefill;
-    std::fill(&fifo_l_[0], &fifo_l_[metamod::kFifoSize], 0.0f);
-    std::fill(&fifo_r_[0], &fifo_r_[metamod::kFifoSize], 0.0f);
-    std::fill(&dry_l_[0], &dry_l_[metamod::kDrySize], 0.0f);
-    std::fill(&dry_r_[0], &dry_r_[metamod::kDrySize], 0.0f);
+    std::fill(&s_->fifo_l[0], &s_->fifo_l[metamod::kFifoSize], 0.0f);
+    std::fill(&s_->fifo_r[0], &s_->fifo_r[metamod::kFifoSize], 0.0f);
+    std::fill(&s_->dry_l[0], &s_->dry_l[metamod::kDrySize], 0.0f);
+    std::fill(&s_->dry_r[0], &s_->dry_r[metamod::kDrySize], 0.0f);
     dry_pos_ = 0;
   }
 
@@ -124,10 +145,10 @@ class Effect : public Processor {
       float carrier = internal ? 0.0f : in[0];
       float modulator = internal ? 0.5f * (in[0] + in[1]) : in[1];
       float up[4];
-      up_.Process(carrier, modulator, up);
+      s_->up.Process(carrier, modulator, up);
       for (int k = 0; k < 2; ++k) {
-        block_in_[n_in_].l = ToShort(up[2 * k]);
-        block_in_[n_in_].r = ToShort(up[2 * k + 1]);
+        s_->block_in[n_in_].l = ToShort(up[2 * k]);
+        s_->block_in[n_in_].r = ToShort(up[2 * k + 1]);
         ++n_in_;
       }
       if (n_in_ == metamod::kBlock) {
@@ -135,8 +156,8 @@ class Effect : public Processor {
         RenderBlock();
       }
 
-      float wet_l = fifo_l_[fifo_read_];
-      float wet_r = fifo_r_[fifo_read_];
+      float wet_l = s_->fifo_l[fifo_read_];
+      float wet_r = s_->fifo_r[fifo_read_];
       fifo_read_ = (fifo_read_ + 1) % metamod::kFifoSize;
 #if WARPS_SHIFTER
       // The frequency shifter mixes dry and wet itself (channel_drive[1]).
@@ -144,15 +165,15 @@ class Effect : public Processor {
       out[1] = wet_r;
 #else
       // Warps has no dry/wet: mix with the input, delayed to line up.
-      dry_l_[dry_pos_] = in[0];
-      dry_r_[dry_pos_] = in[1];
+      s_->dry_l[dry_pos_] = in[0];
+      s_->dry_r[dry_pos_] = in[1];
       size_t tap = (dry_pos_ + metamod::kDrySize - metamod::kDryDelay) % metamod::kDrySize;
       dry_pos_ = (dry_pos_ + 1) % metamod::kDrySize;
       wet_ += 0.0005f * (target_wet_ - wet_);
       float dry = std::min(1.0f, 2.0f * (1.0f - wet_));
       float wet = std::min(1.0f, 2.0f * wet_);
-      out[0] = dry * dry_l_[tap] + wet * wet_l;
-      out[1] = dry * dry_r_[tap] + wet * wet_l;
+      out[0] = dry * s_->dry_l[tap] + wet * wet_l;
+      out[1] = dry * s_->dry_r[tap] + wet * wet_l;
 #endif
     }
   }
@@ -283,12 +304,42 @@ class Effect : public Processor {
     warps::lut_xfade_out = xfade + LUT_XFADE_IN_SIZE;
     p += metamod::Align(2 * LUT_XFADE_IN_SIZE * sizeof(float));
 
+    // Wavefolder: Q15 values from second differences (see resources.h).
     float* fold = reinterpret_cast<float*>(p);
-    for (size_t i = 0; i < LUT_BIPOLAR_FOLD_SIZE; ++i) {
-      fold[i] = warps::lut_bipolar_fold_q15[i] * warps::kBipolarFoldScale;
+    const int8_t* d2 = warps::lut_bipolar_fold_d2;
+    int32_t q = warps::kBipolarFoldStart[0];
+    int32_t d = warps::kBipolarFoldStart[1];
+    fold[0] = q * warps::kBipolarFoldScale;
+    for (size_t i = 1; i < LUT_BIPOLAR_FOLD_SIZE; ++i) {
+      if (i > 1) {
+        int32_t step = *d2++;
+        if (step == -128) {
+          step = static_cast<int16_t>(static_cast<uint8_t>(d2[0]) | (static_cast<uint8_t>(d2[1]) << 8));
+          d2 += 2;
+        }
+        d += step;
+      }
+      q += d;
+      fold[i] = q * warps::kBipolarFoldScale;
     }
     warps::lut_bipolar_fold = fold;
     p += metamod::Align(LUT_BIPOLAR_FOLD_SIZE * sizeof(float));
+
+    // MIDI note to frequency at 96 kHz, capped at 12 kHz: note (i - 48) in
+    // the high table, 1/256 semitone steps in the low one.
+    float* midi = reinterpret_cast<float*>(p);
+    for (size_t i = 0; i < LUT_MIDI_TO_F_HIGH_SIZE; ++i) {
+      // stmlib's ratio table covers +-127 semitones; above that it is capped.
+      float semitones = std::min(127.0f, static_cast<float>(i) - 48.0f - 69.0f);
+      float f = 440.0f * stmlib::SemitonesToRatio(semitones);
+      midi[i] = std::min(f, 12000.0f) / 96000.0f;
+    }
+    for (size_t i = 0; i < LUT_MIDI_TO_F_LOW_SIZE; ++i) {
+      midi[LUT_MIDI_TO_F_HIGH_SIZE + i] = stmlib::SemitonesToRatio(static_cast<float>(i) / 256.0f);
+    }
+    warps::lut_midi_to_f_high = midi;
+    warps::lut_midi_to_f_low = midi + LUT_MIDI_TO_F_HIGH_SIZE;
+    p += metamod::Align((LUT_MIDI_TO_F_HIGH_SIZE + LUT_MIDI_TO_F_LOW_SIZE) * sizeof(float));
 
     // Harmonic series of the three waveforms: amplitude and phase per harmonic.
     float* wav = reinterpret_cast<float*>(p);
@@ -350,38 +401,36 @@ class Effect : public Processor {
     note_smoothed_ += 0.1f * (note_ - note_smoothed_);
     w->note = note_smoothed_;
 #endif
-    modulator_->Process(block_in_, block_out_, metamod::kBlock);
+#if WARPS_SHIFTER
+    // Straight to the easter egg: Process() would pull the whole
+    // cross-modulation and vocoder engine into the unit.
+    modulator_->ProcessEasterEgg(s_->block_in, s_->block_out, metamod::kBlock);
+#else
+    modulator_->Process(s_->block_in, s_->block_out, metamod::kBlock);
+#endif
 
     for (size_t i = 0; i < metamod::kBlock; ++i) {
       float l, r;
 #if WARPS_SHIFTER
-      float main = block_out_[i].l / 32768.0f;
-      float aux = block_out_[i].r / 32768.0f;
+      float main = s_->block_out[i].l / 32768.0f;
+      float aux = s_->block_out[i].r / 32768.0f;
 #else
-      float main = block_out_[i].l / 32768.0f;
+      float main = s_->block_out[i].l / 32768.0f;
       float aux = main;
 #endif
-      if (down_.Process(main, aux, &l, &r)) {
-        fifo_l_[fifo_write_] = l;
-        fifo_r_[fifo_write_] = r;
+      if (s_->down.Process(main, aux, &l, &r)) {
+        s_->fifo_l[fifo_write_] = l;
+        s_->fifo_r[fifo_write_] = r;
         fifo_write_ = (fifo_write_ + 1) % metamod::kFifoSize;
       }
     }
   }
 
   warps::Modulator* modulator_ = nullptr;
-  mi_glue::Upsampler2<metamod::kTaps> up_;
-  mi_glue::Downsampler2<metamod::kTaps> down_;
-
-  warps::ShortFrame block_in_[metamod::kBlock];
-  warps::ShortFrame block_out_[metamod::kBlock];
+  metamod::State* s_ = nullptr;
   size_t n_in_ = 0;
-  float fifo_l_[metamod::kFifoSize];
-  float fifo_r_[metamod::kFifoSize];
   size_t fifo_read_ = 0;
   size_t fifo_write_ = 0;
-  float dry_l_[metamod::kDrySize];
-  float dry_r_[metamod::kDrySize];
   size_t dry_pos_ = 0;
 
   // Written by the UI callbacks, read once per block. Meta Mod: algorithm,

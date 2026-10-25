@@ -72,12 +72,16 @@ extern const float* lut_xfade_in;  // nts3-mutable: filled at init in SDRAM
 extern const float* lut_xfade_out;  // nts3-mutable: filled at init in SDRAM
 extern const float* lut_bipolar_fold;  // nts3-mutable: filled at init in SDRAM
 // nts3-mutable: lut_bipolar_fold comes from measured data (timbre.raw), so it
-// ships as Q15 (8 KB instead of 16 KB, within 1.4e-5 of the float table) and
-// is expanded at init: lut_bipolar_fold[i] = q15[i] * kBipolarFoldScale.
-extern const int16_t lut_bipolar_fold_q15[];
+// cannot be regenerated. It ships as Q15 values (within 1.4e-5 of the float
+// table), coded as second differences in 8 bits: q[0] and q[1] - q[0] are
+// kBipolarFoldStart, then one int8 per sample, where -128 escapes a
+// little-endian int16 in the next two bytes. About 4 KB instead of 16 KB; it
+// is decoded at init: lut_bipolar_fold[i] = q[i] * kBipolarFoldScale.
+extern const int8_t lut_bipolar_fold_d2[];
+extern const int16_t kBipolarFoldStart[2];
 const float kBipolarFoldScale = 0.8678009033f / 32767.0f;
-extern const float lut_midi_to_f_high[];
-extern const float lut_midi_to_f_low[];
+extern const float* lut_midi_to_f_high;  // nts3-mutable: filled at init in SDRAM
+extern const float* lut_midi_to_f_low;  // nts3-mutable: filled at init in SDRAM
 extern const float lut_pot_curve[];
 extern const float lut_ap_poles[];
 extern const float* wav_sine_i;  // nts3-mutable: filled at init in SDRAM

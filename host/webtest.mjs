@@ -142,7 +142,7 @@ async function main() {
   const rect = await evaluate(`(() => { const r = document.getElementById('pad').getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height}; })()`);
   const at = (fx, fy) => [rect.x + fx * rect.w, rect.y + (1 - fy) * rect.h];
 
-  for (const [n, id] of [['1', 'resonator'], ['2', 'texture'], ['3', 'texture_stretch'], ['4', 'texture_loop']]) {
+  for (const [n, id] of [['1', 'resonator'], ['2', 'texture'], ['3', 'texture_stretch'], ['4', 'texture_loop'], ['5', 'metamod'], ['6', 'freq_shifter']]) {
     await key(n);
     await sleep(1200);
     const before = await meters();
@@ -154,6 +154,7 @@ async function main() {
     }
     const during = await meters();
     if (id === 'texture') shots.push(await screenshot('web-touch-texture'));
+    if (id === 'freq_shifter') shots.push(await screenshot('web-touch-shifter'));
     if (id === 'resonator') shots.push(await screenshot('web-touch-resonator'));
     await mouse('mouseReleased', ...at(0.8, 0.7));
     await sleep(600);

@@ -86,7 +86,16 @@ __attribute__((export_name("nts3_touch"))) void nts3_touch(int phase, int x,
   effect.touchEvent(0, phase, x, y);
 }
 
-// The unit header as JSON: name, parameters (with the strings of
+// Display text of a strings-type parameter value, for those with too many
+// values to list in the description (marked "dynamic" there).
+__attribute__((export_name("nts3_param_str"))) const char* nts3_param_str(
+    int id, int value) {
+  if (id < 0 || id >= static_cast<int>(unit_header.common.num_params)) return "";
+  const char* s = effect.getParameterStrValue(id, value);
+  return s ? s : "";
+}
+
+// The unit header as JSON: name, parameters (with the strings of small
 // strings-type parameters) and default pad mappings.
 __attribute__((export_name("nts3_describe"))) const char* nts3_describe() {
   json_size = 0;
@@ -115,7 +124,9 @@ __attribute__((export_name("nts3_describe"))) const char* nts3_describe() {
     PutInt(p.frac);
     Put(",\"frac_mode\":");
     PutInt(p.frac_mode);
-    if (p.type == k_unit_param_type_strings) {
+    if (p.type == k_unit_param_type_strings && p.max - p.min > 64) {
+      Put(",\"dynamic\":1");
+    } else if (p.type == k_unit_param_type_strings) {
       Put(",\"strings\":[");
       for (int32_t v = p.min; v <= p.max; ++v) {
         const char* s = effect.getParameterStrValue(i, v);

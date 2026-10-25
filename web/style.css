@@ -257,8 +257,8 @@ body.embed .fullpage { display: inline; }
   :root { --knob: 44px; --gap: 10px; }
   body { font-size: 14px; }
   .appbar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand end" "units units"; padding: 8px 12px; row-gap: 8px; }
-  .units { justify-content: space-between; }
-  .unit-tab { flex: 1; padding: 5px 4px 6px; }
+  .units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .unit-tab { padding: 5px 4px 6px; }
   .bar { flex-wrap: wrap; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
   .sources { flex-basis: 100%; }
   .output { width: 100%; justify-content: space-between; gap: 10px; }

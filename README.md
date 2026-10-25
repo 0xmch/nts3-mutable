@@ -46,6 +46,23 @@ stereo with the module's 1 s buffer and stereo spread at 50%. The spectral mode
 is not built: it does a whole FFT frame in one call, which a render callback
 cannot absorb.
 
+### Meta Mod and Freq Shifter (Warps)
+
+Meta Mod is Warps: X morphs through its algorithms (cross-fade, cross-folding,
+diode and digital ring modulation, XOR, comparator, then the 20-band vocoder
+at the top), Y sets their timbre, Depth the dry/wet. The internal oscillator
+is the carrier (Note, Carrier shape) and the input is the modulator; with
+Carrier set to Input L, the left input is the carrier and the right input the
+modulator. Mod Drive and Carrier Drive are Warps' level knobs.
+
+Freq Shifter is Warps' easter egg: X shifts every partial by the same number
+of hertz (center: none, up to about 2 kHz either way, on Warps' own curve),
+Y is feedback, Depth the dry/wet, and the up and down sidebands come out on
+the left and right.
+
+Warps runs at its native 96 kHz between 2x resamplers, so its vocoder bands,
+Hilbert filters and 6x oversampling filters work as designed.
+
 ## Build
 
 ARM units build on a machine with the logue SDK and its pinned toolchain

@@ -28,6 +28,16 @@ const UNITS = [
     blurb: 'A delay that turns into a looper, with a pitch shifter on its output.',
     how: 'X sets the delay time. Touch to capture a loop and keep it playing; Y sets its length and Pitch transposes it.',
   },
+  {
+    id: 'metamod', title: 'Meta Mod', short: 'Meta Mod', module: 'Warps', source: 'chords', touchLabel: 'touch',
+    blurb: 'Cross-modulates the input with an oscillator: wavefolding, ring modulation, XOR, comparator and a 20-band vocoder.',
+    how: 'X morphs through the algorithms (the vocoder sits at the top), Y sets their timbre. Note tunes the oscillator; Carrier set to Input L uses the left input as the carrier and the right as the modulator.',
+  },
+  {
+    id: 'freq_shifter', title: 'Freq Shifter', short: 'Shifter', module: 'Warps · easter egg', source: 'chords', touchLabel: 'touch',
+    blurb: "Warps' hidden frequency shifter: every partial moves by the same number of hertz, up on the left and down on the right.",
+    how: 'X sets the shift; the center is no shift, and either side sweeps to about 2 kHz up or down. Y feeds the output back for barber-pole sweeps.',
+  },
 ];
 
 const ASSIGN = { NONE: 0, X: 1, Y: 2, DEPTH: 3 };
@@ -65,10 +75,18 @@ async function describeUnit(id) {
     const { instance } = await WebAssembly.instantiate(await unitBytes(id), {});
     const e = instance.exports;
     if (e._initialize) e._initialize();
-    const bytes = new Uint8Array(e.memory.buffer, e.nts3_describe());
-    let s = '';
-    for (let i = 0; bytes[i]; i++) s += String.fromCharCode(bytes[i]);
-    describeCache.set(id, JSON.parse(s));
+    const read = (ptr) => {
+      const bytes = new Uint8Array(e.memory.buffer, ptr);
+      let s = '';
+      for (let i = 0; bytes[i]; i++) s += String.fromCharCode(bytes[i]);
+      return s;
+    };
+    const describe = JSON.parse(read(e.nts3_describe()));
+    // Parameters with too many strings to list ask the unit for each one.
+    describe.params.forEach((p, i) => {
+      if (p.dynamic) p.text = (v) => read(e.nts3_param_str(i, v));
+    });
+    describeCache.set(id, describe);
   }
   return describeCache.get(id);
 }
@@ -90,7 +108,7 @@ function formatValue(p, v) {
     case TYPE.MSEC: return `${num(v)} ms`;
     case TYPE.SEC: return `${num(v)} s`;
     case TYPE.ENUM: return String(p.min === 0 ? v + 1 : v);
-    case TYPE.STRINGS: return (p.strings && p.strings[v - p.min]) || String(v);
+    case TYPE.STRINGS: return p.text ? p.text(v) : (p.strings && p.strings[v - p.min]) || String(v);
     case TYPE.DRYWET: return v < 0 ? `D ${num(-v)}` : v > 0 ? `W ${num(v)}` : 'BAL';
     case TYPE.PAN: return v < 0 ? `L ${num(-v)}%` : v > 0 ? `R ${num(v)}%` : 'C';
     case TYPE.SPREAD: return v < 0 ? `< ${num(-v)}` : v > 0 ? `> ${num(v)}` : '0';
@@ -262,6 +280,10 @@ function buildTabs() {
   });
 }
 
+// Strings-type parameters with a few named values get chips; longer lists
+// (and those the unit formats on demand) get a knob.
+const isChoice = (p) => p.type === TYPE.STRINGS && p.strings && p.strings.length <= 8;
+
 const KNOB_R = 25;
 const KNOB_C = 2 * Math.PI * KNOB_R;
 const SWEEP = 0.75 * KNOB_C;
@@ -282,7 +304,7 @@ function buildControls() {
     const cell = document.createElement('div');
     cell.dataset.id = id;
     const badge = { [ASSIGN.X]: ['x', 'X'], [ASSIGN.Y]: ['y', 'Y'], [ASSIGN.DEPTH]: ['depth', 'DEPTH'] }[p.map.assign];
-    if (p.type === TYPE.STRINGS) {
+    if (isChoice(p)) {
       cell.className = 'ctl select' + (p.strings.length > 3 ? ' wide' : '');
       cell.innerHTML = '<span class="name"></span><div class="chips" role="radiogroup"></div>';
       cell.querySelector('.name').textContent = p.name;
@@ -358,7 +380,7 @@ function updateControl(id) {
   if (!cell) return;
   const p = state.describe.params[id];
   const v = state.values[id];
-  if (p.type === TYPE.STRINGS) {
+  if (isChoice(p)) {
     cell.querySelectorAll('.chip').forEach((chip, k) => chip.setAttribute('aria-checked', String(p.min + k === v)));
     return;
   }
