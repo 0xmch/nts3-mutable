@@ -1,0 +1,3 @@
+0.0 param 6 0
+2.0 touch began
+2.05 touch ended

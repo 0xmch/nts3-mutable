@@ -6,9 +6,9 @@
 // Pad: X = note, Y = structure, depth = dry/wet.
 // Touching the pad strums a new voice, and so does sliding X to a new semitone
 // while touching. With audio on the input, the input excites the resonator and
-// its transients strum too (Rings with IN patched). With a silent input the
-// internal exciter takes over (Rings with nothing patched), so tapping the pad
-// plucks the resonator.
+// its transients strum too (Rings with IN patched). Once the input has stayed
+// below -45 dBFS for 0.75 s, the internal exciter takes over (Rings with
+// nothing patched), so tapping the pad plucks the resonator.
 
 #pragma once
 
@@ -111,8 +111,17 @@ class Effect : public Processor {
       // blocks, so the wet signal comes out one block (0.5 ms) late.
       float mono = 0.5f * (in[0] + in[1]);
 
-      // Rings' input noise gate (rings.cc). Its envelope also tells whether
-      // something is plugged in.
+      // Rings detects a patched input from its jack. Here the input counts as
+      // plugged in until 0.75 s after its last sample above -45 dBFS (the
+      // noise gate threshold below, as an amplitude); that bridges the gaps
+      // in a beat.
+      if (std::fabs(mono) > kPresenceLevel) {
+        input_hold_ = kInputHoldSamples;
+      } else if (input_hold_) {
+        --input_hold_;
+      }
+
+      // Rings' input noise gate (rings.cc).
       float error = mono * mono - in_level_;
       in_level_ += error * (error > 0.0f ? 0.1f : 0.0001f);
       float gate = in_level_ <= kNoiseGateThreshold
@@ -185,10 +194,10 @@ class Effect : public Processor {
 
  private:
   static constexpr size_t kBlock = rings::kMaxBlockSize;
-  static constexpr float kNoiseGateThreshold = 0.00003f;
-  // Input counts as unplugged after 1.5 s below the noise gate threshold.
-  static constexpr int32_t kInputHoldBlocks =
-      static_cast<int32_t>(1.5f * resonator::kSampleRate / kBlock);
+  static constexpr float kNoiseGateThreshold = 0.00003f;  // power
+  static constexpr float kPresenceLevel = 0.0055f;  // sqrt(kNoiseGateThreshold)
+  static constexpr int32_t kInputHoldSamples =
+      static_cast<int32_t>(0.75f * resonator::kSampleRate);
   // Same 10 ms inter-onset interval as the Rings strummer.
   static constexpr int32_t kNoteStrumInhibitBlocks =
       static_cast<int32_t>(0.01f * resonator::kSampleRate / kBlock);
@@ -223,11 +232,6 @@ class Effect : public Processor {
     position_ += 0.1f * (target_position_ - position_);
     wet_ += 0.1f * (target_wet_ - wet_);
 
-    if (in_level_ > kNoiseGateThreshold) {
-      input_hold_ = kInputHoldBlocks;
-    } else if (input_hold_) {
-      --input_hold_;
-    }
     bool input_present = input_hold_ > 0;
 
     // Both setters reinitialize the voices, so only call them on a change

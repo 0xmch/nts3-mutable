@@ -2,7 +2,8 @@
 
 The simulator's audio worklet uses SharedArrayBuffer, which browsers only allow
 on cross-origin isolated pages, so every response carries COOP/COEP headers.
-Usage: serve.py <directory> <port>   (binds to localhost only)
+Usage: serve.py [--plain] <directory> <port>   (binds to localhost only)
+--plain sends no isolation headers, like an ordinary static host (web/ page).
 """
 import functools
 import http.server
@@ -13,14 +14,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".wasm": "application/wasm", ".js": "text/javascript"}
 
+    isolate = True
+
     def end_headers(self):
-        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
-        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        if self.isolate:
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
 
-directory, port = sys.argv[1], int(sys.argv[2])
+args = sys.argv[1:]
+if args and args[0] == "--plain":
+    Handler.isolate = False
+    args = args[1:]
+directory, port = args[0], int(args[1])
 server = http.server.ThreadingHTTPServer(
     ("127.0.0.1", port), functools.partial(Handler, directory=directory))
 print(f"serving {directory} on http://localhost:{port}/", flush=True)

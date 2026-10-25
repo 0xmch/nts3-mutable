@@ -59,7 +59,27 @@ ARM units build on a machine with the logue SDK and its pinned toolchain
 Load `dist/*.nts3unit` with KORG KONTROL Editor: drag the file onto the user
 effects list and press SEND.
 
-## Browser simulator
+## Web page
+
+`web/` is a static page that plays the units in the browser: an XY pad with
+the live output spectrum, the unit's knobs (built from its own header), test
+loops synthesized in the page, your own file or live input, meters, and
+recording to WAV. Each unit is compiled from the same sources to standalone
+WebAssembly (`web/glue.cc`, about 60 KB) and runs in an AudioWorklet, so the
+page needs no special server headers and works on any static host or in an
+iframe.
+
+    scripts/web.sh              # builds web/units/*.wasm, serves http://localhost:8791/
+
+URL parameters: `unit` (resonator, texture, texture_stretch, texture_loop),
+`p` (parameter values joined with dots), `src` (beat, chords, plucks, noise,
+silence) and `embed=1` (no header or footer, for an iframe). The address bar
+always holds the current sound, so it doubles as a preset link.
+
+`host/webtest.mjs` drives the page in a muted headless Chrome: it starts audio,
+plays the pad on every unit, reads the meters and saves screenshots.
+
+## KORG's browser simulator
 
     scripts/sim.sh resonator    # builds with emscripten on the build host
 

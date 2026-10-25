@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nts3-mutable</title>
+<meta name="description" content="Mutable Instruments Rings and Clouds as KORG NTS-3 effects, running in the browser: the same C++, compiled to WebAssembly.">
+<link rel="preload" href="fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%237aa2f7'/%3E%3Cstop offset='.55' stop-color='%23bb9af7'/%3E%3Cstop offset='1' stop-color='%237dcfff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='3' y='3' width='10' height='10' rx='3' fill='url(%23g)'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <div>
+        <h1>nts3-mutable</h1>
+        <p>Mutable Instruments DSP as KORG NTS-3 effects, running here in your browser</p>
+      </div>
+    </div>
+    <span class="status" id="status">audio off</span>
+  </header>
+
+  <nav class="units" role="tablist" aria-label="Effect unit"></nav>
+
+  <main class="deck">
+    <section class="card pad-card" aria-label="Performance pad">
+      <div class="pad" id="pad" tabindex="0" aria-label="XY pad. Arrow keys move, Space touches.">
+        <canvas id="pad-canvas"></canvas>
+        <div class="axis y" id="axis-y"></div>
+        <div class="axis x" id="axis-x"></div>
+        <div class="state" id="pad-state"></div>
+        <div class="start" id="start">
+          <button id="start-button">Start audio</button>
+          <p>Headphones recommended. The volume starts low.</p>
+        </div>
+      </div>
+      <div class="pad-row">
+        <button class="toggle" id="hold" aria-pressed="false" title="Keep the pad touched after you let go (H)">Hold</button>
+        <label class="depth"><span>Depth</span><input type="range" id="depth" min="0" max="1" step="0.001" value="0.5"><output id="depth-value"></output></label>
+        <button class="toggle" id="bypass" aria-pressed="false" title="Hear the input without the effect (B)">Bypass</button>
+      </div>
+    </section>
+
+    <section class="card panel" aria-label="Unit controls">
+      <div class="unit-info">
+        <h2 id="unit-title"></h2>
+        <p id="unit-blurb"></p>
+        <p class="how" id="unit-how"></p>
+      </div>
+      <div class="controls" id="controls"></div>
+      <div class="out-row">
+        <div class="meters" aria-hidden="true">
+          <div class="meter"><span>L</span><div class="bar"><div class="fill" id="meter-l"></div><div class="hold" id="hold-l"></div></div></div>
+          <div class="meter"><span>R</span><div class="bar"><div class="fill" id="meter-r"></div><div class="hold" id="hold-r"></div></div></div>
+        </div>
+        <div class="out-actions">
+          <label class="volume"><span>Out</span><input type="range" id="volume" min="0" max="1" step="0.01" value="0.7"><output id="volume-value"></output></label>
+          <button class="toggle rec" id="record" aria-pressed="false" title="Record the output to a WAV file">Rec</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="card sources" id="sources" role="radiogroup" aria-label="Input">
+    <span class="label">Input</span>
+    <span class="note" id="source-note">Drop an audio file anywhere to use it.</span>
+    <input type="file" id="file" accept="audio/*" hidden>
+    <a class="fullpage" id="fullpage" target="_blank" rel="noopener">Open the full page ↗</a>
+  </section>
+
+  <footer>
+    <p>DSP: <a href="https://github.com/pichenettes/eurorack">Rings and Clouds</a> by Emilie Gillet (MIT). Unit API: <a href="https://github.com/korginc/logue-sdk">KORG logue SDK</a> (BSD 3-Clause).</p>
+    <p>Not affiliated with KORG or Mutable Instruments. Keys: 1–4 units, H hold, B bypass.</p>
+  </footer>
+</div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="arc-grad" x1="0" x2="1" y1="1" y2="0"><stop offset="0" stop-color="#7aa2f7"/><stop offset=".55" stop-color="#bb9af7"/><stop offset="1" stop-color="#7dcfff"/></linearGradient>
+</defs></svg>
+<div class="toast" id="toast" role="status" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
