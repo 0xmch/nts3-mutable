@@ -106,28 +106,28 @@ function buildBeat(ctx) {
   }
 }
 
-// Twelve bars of open, airy jazz harmony. The roots alternate up a minor third
-// and down a half step (each minor third stays on one diminished-seventh axis,
-// each half step slides to the next), so every four chords the line has risen
-// a major third: three phrases on C, E and G# bring it back to C.
+// Sixteen bars of bright, airy 90s racing-game harmony. Each key plays the
+// "royal road" progression (IVmaj9, V9sus, iii7, vi9), then the music
+// modulates up a minor third: C, Eb, F#, A and back to C, the four keys of one
+// diminished-seventh axis. At every key change the bass slides down a half
+// step from vi into the new IV (A to Ab, C to B, ...): up a minor third, down
+// a semitone. Voicings are open (fourths and fifths, thirds tolerated, never
+// seconds) and voice-led, common tones held.
 //
-// Voicings are open, in fourths and fifths (thirds tolerated, never seconds),
-// and voice-led: every upper voice moves to the nearest tone of the next chord
-// and common tones hold, so the third relationships glide instead of jumping.
-// The bass takes the root at the octave nearest the previous one.
-//
-// Sound: lush supersaw-and-triangle pads that bloom open with a light pump, a
-// sine sub, a soft high "air" layer, harmonic bells arpeggiating the voicing
-// through a ping-pong delay, and a bright generated reverb. Only node-to-node
-// connections: audio extensions that wrap AudioNode.connect break connections
-// to an AudioParam.
+// Sound: a syncopated electric piano with auto-pan tremolo, a string pad with
+// a light pump, a bouncing bass, bell sparkles through a ping-pong delay and a
+// bright reverb. Only node-to-node connections and automation: audio
+// extensions that wrap AudioNode.connect break connections to an AudioParam.
+const CHORD_BPM = 118;
+const CHORD_SIXTEENTH = 60 / CHORD_BPM / 4;
 const QUALITIES = [
-  { name: '6/9', tones: [0, 2, 4, 7, 9, 11], must: [4] },           // major, 9 and 13
-  { name: 'm11', tones: [0, 2, 3, 5, 7, 10], must: [3, 5] },        // minor 11
-  { name: 'maj7#11', tones: [0, 2, 4, 6, 7, 9, 11], must: [6] },    // lydian
-  { name: '7sus', tones: [0, 2, 5, 7, 9, 10], must: [5, 10] },      // suspended dominant
+  { name: 'maj9', tones: [0, 2, 4, 7, 11], must: [4, 11] },   // IV
+  { name: '9sus', tones: [0, 2, 5, 7, 10], must: [5, 10] },   // V
+  { name: 'm7(11)', tones: [0, 3, 5, 7, 10], must: [3, 10] }, // iii
+  { name: 'm9', tones: [0, 2, 3, 7, 10], must: [2, 3] },      // vi
 ];
-const ROOT_STEPS = [0, 3, 2, 5]; // +m3, -m2, +m3; the next phrase starts +M3
+const DEGREES = [5, 7, 4, 9];  // IV V iii vi, in semitones above the key
+const KEYS = [0, 3, 6, 9];     // C Eb F# A
 
 // Score of a 4-note voicing's spacing: fourths and fifths are free, thirds and
 // tritones cost a little, wide gaps a little more; seconds are not allowed.
@@ -169,13 +169,13 @@ function chordProgression() {
   let chords = [];
   for (let pass = 0; pass < 2; pass++) {
     let previous = chords.length ? chords[chords.length - 1].upper : null;
-    let bass = chords.length ? chords[chords.length - 1].root : 36;
+    let bass = chords.length ? chords[chords.length - 1].root : 41;
     chords = [];
-    for (let phrase = 0; phrase < 3; phrase++) {
-      ROOT_STEPS.forEach((step, k) => {
-        const pc = (phrase * 4 + step) % 12;
+    for (const key of KEYS) {
+      DEGREES.forEach((degree, k) => {
+        const pc = (key + degree) % 12;
         let root = 36 + pc;
-        for (const r of [24 + pc, 36 + pc, 48 + pc]) if (r >= 34 && r <= 50 && Math.abs(r - bass) < Math.abs(root - bass)) root = r;
+        for (const r of [24 + pc, 36 + pc, 48 + pc]) if (r >= 34 && r <= 49 && Math.abs(r - bass) < Math.abs(root - bass)) root = r;
         const upper = bestVoicing(root, QUALITIES[k], previous);
         chords.push({ root, upper, quality: QUALITIES[k].name });
         previous = upper;
@@ -203,111 +203,137 @@ function reverbImpulse(ctx, seconds, seed) {
   return ir;
 }
 
+// Adds decaying sine partials (the shape of envelope(): 3 ms attack, then an
+// exponential fall to -80 dB over `decay`) straight into a buffer. The piano,
+// bass and sparkles are hundreds of short notes; computing them here instead
+// of as audio nodes makes the loop render several times faster.
+function addPartials(out, sampleRate, t, frequency, partials, gain) {
+  const start = Math.round(t * sampleRate);
+  const attack = Math.round(0.003 * sampleRate);
+  for (const [ratio, level, decay] of partials) {
+    const w = (2 * Math.PI * frequency * ratio) / sampleRate;
+    if (w >= Math.PI) continue;
+    const n = Math.min(out.length - start, attack + Math.round(decay * sampleRate));
+    const fall = Math.pow(0.0001 / level, 1 / (decay * sampleRate));
+    const c = Math.cos(w), s = Math.sin(w);
+    let re = 1, im = 0, env = level * gain;
+    for (let i = 0; i < n; i++) {
+      const a = i < attack ? (i / attack) * level * gain : (env *= fall);
+      out[start + i] += a * im;
+      const r = re * c - im * s;
+      im = re * s + im * c;
+      re = r;
+    }
+  }
+}
+
 function buildChords(ctx) {
-  const bar = 16 * SIXTEENTH;
-  const beat = 4 * SIXTEENTH;
+  const step = CHORD_SIXTEENTH;
+  const bar = 16 * step;
   const chords = chordProgression();
+  const sr = ctx.sampleRate;
+  const length = ctx.length;
 
-  const reverb = new ConvolverNode(ctx, { buffer: reverbImpulse(ctx, 3.8, 23) });
-  const reverbOut = new GainNode(ctx, { gain: 0.38 });
-  reverb.connect(reverbOut).connect(ctx.destination);
+  // Reverb with a mono send, which halves the convolution work.
+  const reverbSend = new GainNode(ctx, { gain: 1, channelCount: 1, channelCountMode: 'explicit' });
+  const reverb = new ConvolverNode(ctx, { buffer: reverbImpulse(ctx, 2.8, 23) });
+  const reverbOut = new GainNode(ctx, { gain: 0.3 });
+  reverbSend.connect(reverb).connect(reverbOut).connect(ctx.destination);
 
-  // Pad bus: a low-pass that blooms open over each bar, then a light pump.
-  const filter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 1400, Q: 0.6 });
+  // String pad (audio nodes): low-pass, light pump on the beat.
+  const padFilter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 4200, Q: 0.5 });
   const pump = new GainNode(ctx, { gain: 1 });
-  const padSend = new GainNode(ctx, { gain: 0.55 });
-  filter.connect(pump).connect(ctx.destination);
-  pump.connect(padSend).connect(reverb);
-  chords.forEach((_, i) => {
-    const t = i * bar;
-    filter.frequency.setValueAtTime(1300, t);
-    filter.frequency.exponentialRampToValueAtTime(6200, t + bar * 0.5);
-    filter.frequency.exponentialRampToValueAtTime(3000, t + bar);
-  });
+  const padSend = new GainNode(ctx, { gain: 0.5 });
+  padFilter.connect(pump).connect(ctx.destination);
+  pump.connect(padSend).connect(reverbSend);
   for (let b = 0; b < chords.length * 4; b++) {
-    const t = b * beat;
+    const t = b * 4 * step;
     pump.gain.setValueAtTime(0.8, t);
-    pump.gain.setTargetAtTime(1, t + 0.02, 0.1);
+    pump.gain.setTargetAtTime(1, t + 0.02, 0.09);
   }
 
-  // Air: high-passed noise that swells with each chord.
-  const air = new AudioBufferSourceNode(ctx, { buffer: noiseBuffer(ctx, chords.length * bar + 6, 31) });
-  const airHigh = new BiquadFilterNode(ctx, { type: 'highpass', frequency: 7500 });
-  const airAmp = new GainNode(ctx, { gain: 0 });
-  chords.forEach((_, i) => {
-    const t = i * bar;
-    airAmp.gain.setValueAtTime(0.004, t);
-    airAmp.gain.linearRampToValueAtTime(0.018, t + bar * 0.55);
-    airAmp.gain.linearRampToValueAtTime(0.004, t + bar);
-  });
-  air.connect(airHigh).connect(airAmp).connect(padSend);
-  air.start(0);
+  const EP = [[1, 0.055, 1.6], [2, 0.018, 0.7], [3, 0.006, 0.3], [7.1, 0.004, 0.06]];
+  const BELL = [[1, 0.05, 0.9], [2, 0.015, 0.4], [3, 0.005, 0.18]];
+  const BASS = [[1, 0.32, 0.42], [2, 0.08, 0.2]];
+  const ep = new Float32Array(length);
+  const bass = new Float32Array(length);
+  const bells = new Float32Array(length);
 
   chords.forEach(({ root, upper }, i) => {
-    const t = i * bar;
+    const t0 = i * bar;
     upper.forEach((note, k) => {
-      const voices = [['sawtooth', -9, -0.7, 0.022], ['sawtooth', 9, 0.7, 0.022], ['triangle', 0, k % 2 ? 0.3 : -0.3, 0.05]];
-      voices.forEach(([type, detune, pan, level]) => {
+      [['sawtooth', -7, -0.6, 0.016], ['sawtooth', 7, 0.6, 0.016], ['triangle', 0, k % 2 ? 0.3 : -0.3, 0.03]].forEach(([type, detune, pan, level]) => {
         const osc = new OscillatorNode(ctx, { type, frequency: midiToHz(note), detune });
         const amp = new GainNode(ctx, { gain: 0 });
         const panner = new StereoPannerNode(ctx, { pan });
-        amp.gain.setValueAtTime(0, t);
-        amp.gain.linearRampToValueAtTime(level, t + 0.45);
-        amp.gain.setValueAtTime(level, t + bar - 0.15);
-        amp.gain.exponentialRampToValueAtTime(0.0001, t + bar + 1.6);
-        osc.connect(amp).connect(panner).connect(filter);
-        osc.start(t);
-        osc.stop(t + bar + 1.7);
+        amp.gain.setValueAtTime(0, t0);
+        amp.gain.linearRampToValueAtTime(level, t0 + 0.4);
+        amp.gain.setValueAtTime(level, t0 + bar - 0.1);
+        amp.gain.exponentialRampToValueAtTime(0.0001, t0 + bar + 1.0);
+        osc.connect(amp).connect(panner).connect(padFilter);
+        osc.start(t0);
+        osc.stop(t0 + bar + 1.1);
       });
     });
-    const sub = new OscillatorNode(ctx, { type: 'sine', frequency: midiToHz(root) });
-    const subAmp = new GainNode(ctx, { gain: 0 });
-    subAmp.gain.setValueAtTime(0, t);
-    subAmp.gain.linearRampToValueAtTime(0.2, t + 0.1);
-    subAmp.gain.setValueAtTime(0.2, t + bar - 0.1);
-    subAmp.gain.linearRampToValueAtTime(0, t + bar);
-    sub.connect(subAmp).connect(pump);
-    sub.start(t);
-    sub.stop(t + bar + 0.05);
+    // Electric piano comp: on the one, the "and" of two, and the three.
+    for (const [s16, velocity] of [[0, 1], [6, 0.7], [10, 0.55]]) {
+      for (const note of upper) addPartials(ep, sr, t0 + s16 * step, midiToHz(note), EP, velocity);
+    }
+    // Bass: root, octave, root, fifth.
+    for (const [s16, interval] of [[0, 0], [6, 12], [10, 0], [14, 7]]) {
+      addPartials(bass, sr, t0 + s16 * step, midiToHz(root + interval), BASS, 1);
+    }
+    // Sparkles from the top of the voicing, an octave up.
+    for (const [s16, v] of [[3, 3], [11, 2]]) {
+      addPartials(bells, sr, t0 + s16 * step, midiToHz(upper[v] + 12), BELL, 1);
+    }
   });
 
-  // Ping-pong delay, dotted eighths, for the bells.
-  const send = new GainNode(ctx, { gain: 1 });
-  const left = new DelayNode(ctx, { delayTime: 3 * SIXTEENTH, maxDelayTime: 1 });
-  const right = new DelayNode(ctx, { delayTime: 3 * SIXTEENTH, maxDelayTime: 1 });
-  const feedLeft = new GainNode(ctx, { gain: 0.4 });
-  const feedRight = new GainNode(ctx, { gain: 0.4 });
-  const tone = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 6000 });
+  // Electric piano to stereo with an auto-pan tremolo (equal-power pan law).
+  const epBuffer = ctx.createBuffer(2, length, sr);
+  const epL = epBuffer.getChannelData(0);
+  const epR = epBuffer.getChannelData(1);
+  const rate = (2 * Math.PI * (CHORD_BPM / 60) * 1.5) / sr;
+  for (let i = 0; i < length; i++) {
+    const angle = (0.45 * Math.sin(rate * i) + 1) * (Math.PI / 4);
+    epL[i] = ep[i] * Math.cos(angle);
+    epR[i] = ep[i] * Math.sin(angle);
+  }
+  const play = (buffer) => {
+    const node = new AudioBufferSourceNode(ctx, { buffer });
+    node.start(0);
+    return node;
+  };
+  const epNode = play(epBuffer);
+  const epSend = new GainNode(ctx, { gain: 0.35 });
+  epNode.connect(ctx.destination);
+  epNode.connect(epSend).connect(reverbSend);
+
+  const mono = (data) => {
+    const buffer = ctx.createBuffer(1, length, sr);
+    buffer.copyToChannel(data, 0);
+    return buffer;
+  };
+  play(mono(bass)).connect(ctx.destination);
+
+  // Ping-pong delay, dotted eighths, for the sparkles.
+  const left = new DelayNode(ctx, { delayTime: 3 * step, maxDelayTime: 1 });
+  const right = new DelayNode(ctx, { delayTime: 3 * step, maxDelayTime: 1 });
+  const feedLeft = new GainNode(ctx, { gain: 0.38 });
+  const feedRight = new GainNode(ctx, { gain: 0.38 });
+  const tone = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 6500 });
   const panLeft = new StereoPannerNode(ctx, { pan: -0.85 });
   const panRight = new StereoPannerNode(ctx, { pan: 0.85 });
   const wet = new GainNode(ctx, { gain: 0.45 });
-  send.connect(tone).connect(left);
+  const bellNode = play(mono(bells));
+  bellNode.connect(ctx.destination);
+  bellNode.connect(tone).connect(left);
   left.connect(panLeft).connect(wet);
   left.connect(feedLeft).connect(right);
   right.connect(panRight).connect(wet);
   right.connect(feedRight).connect(left);
   wet.connect(ctx.destination);
-  wet.connect(reverb);
-
-  // Harmonic bells walking up the voicing on the off-beats, an octave up.
-  chords.forEach(({ upper }, i) => {
-    [[2, 0], [6, 1], [10, 2], [14, 3]].forEach(([step, voice]) => {
-      if (i % 2 && step === 14) return;
-      const t = i * bar + step * SIXTEENTH;
-      const f = midiToHz(upper[voice] + 12);
-      const bell = new GainNode(ctx, { gain: 1 });
-      bell.connect(ctx.destination);
-      bell.connect(send);
-      for (const [ratio, level, decay] of [[1, 0.07, 0.9], [2, 0.022, 0.45], [3, 0.008, 0.2]]) {
-        const osc = new OscillatorNode(ctx, { type: 'sine', frequency: f * ratio });
-        const amp = new GainNode(ctx, { gain: 0 });
-        envelope(ctx, amp, t, level, 0.003, decay);
-        osc.connect(amp).connect(bell);
-        osc.start(t);
-        osc.stop(t + decay + 0.05);
-      }
-    });
-  });
+  wet.connect(reverbSend);
 }
 
 // Two bars of mallet notes in A minor pentatonic.
@@ -348,7 +374,7 @@ function buildNoise(ctx) {
 }
 
 export const SOURCES = [
-  { id: 'chords', label: 'Chords', hint: 'open jazz voicings moving by thirds', seconds: 12 * 16 * SIXTEENTH, tail: 4.5, build: buildChords },
+  { id: 'chords', label: 'Chords', hint: 'bright 90s racing chords, up a minor third per key', seconds: 16 * 16 * CHORD_SIXTEENTH, tail: 3.6, build: buildChords },
   { id: 'beat', label: 'Beat', hint: 'two bars of drums', seconds: 32 * SIXTEENTH, tail: 0.6, build: buildBeat },
   { id: 'plucks', label: 'Plucks', hint: 'mallet notes', seconds: 32 * SIXTEENTH, tail: 1.0, build: buildPlucks },
   { id: 'noise', label: 'Noise', hint: 'slow noise swells', seconds: 8, tail: 0, build: buildNoise },

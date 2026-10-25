@@ -1,5 +1,6 @@
-// Helpers shared by the units: lookup tables built at init, and the 48 kHz <->
-// 32 kHz resamplers for modules that run at 32 kHz (Clouds).
+// Helpers shared by the units: lookup tables built at init, and resamplers for
+// modules that run at their own rate: 48 <-> 32 kHz (Clouds) and 48 <-> 96 kHz
+// (Warps).
 
 #pragma once
 
@@ -32,8 +33,9 @@ inline void FillSine(float* table, size_t count, size_t period) {
   }
 }
 
-// Linear-phase lowpass at 96 kHz shared by both resamplers: Kaiser-windowed
-// sinc, 128 taps, cutoff 15 kHz, beta 7.86 (about 80 dB stopband from 17 kHz).
+// Linear-phase lowpass prototypes at 96 kHz: Kaiser-windowed sinc, beta 7.86
+// (about 80 dB stopband). The 48/32 kHz pair uses 128 taps cut at 15 kHz
+// (stopband from 17 kHz).
 const size_t kProtoTaps = 128;
 
 inline float BesselI0(float x) {
@@ -46,34 +48,36 @@ inline float BesselI0(float x) {
   return sum;
 }
 
-inline void DesignPrototype(float* h) {
-  const float fc = 15000.0f / 96000.0f;
+inline void DesignPrototype(float* h, size_t taps = kProtoTaps,
+                            float cutoff_hz = 15000.0f) {
+  const float fc = cutoff_hz / 96000.0f;
   const float beta = 7.86f;
-  const float center = 0.5f * (kProtoTaps - 1);
+  const float center = 0.5f * (taps - 1);
   float i0_beta = BesselI0(beta), sum = 0.0f;
-  for (size_t n = 0; n < kProtoTaps; ++n) {
+  for (size_t n = 0; n < taps; ++n) {
     float t = static_cast<float>(n) - center;
-    float sinc = SinTurns(fc * t) / (3.14159265f * t);  // t is never 0
+    float sinc = t == 0.0f ? 2.0f * fc : SinTurns(fc * t) / (3.14159265f * t);
     float r = t / center;
     float w = BesselI0(beta * __builtin_sqrtf(1.0f - r * r)) / i0_beta;
     h[n] = sinc * w;
     sum += h[n];
   }
-  for (size_t n = 0; n < kProtoTaps; ++n) h[n] /= sum;
+  for (size_t n = 0; n < taps; ++n) h[n] /= sum;
 }
 
-// Rational resampler, stereo, by L/M through the 96 kHz prototype. The history
-// is stored twice so a filter pass always reads contiguous samples.
-template <int L, int M>
+// Rational resampler, stereo, by L/M through a 96 kHz prototype of TAPS taps.
+// The history is stored twice so a filter pass always reads contiguous
+// samples.
+template <int L, int M, size_t TAPS = kProtoTaps>
 class Resampler {
  public:
-  static const size_t kTapsPerPhase = (kProtoTaps + L - 1) / L;
+  static const size_t kTapsPerPhase = (TAPS + L - 1) / L;
 
   void Init(const float* prototype) {
     for (int p = 0; p < L; ++p) {
       for (size_t i = 0; i < kTapsPerPhase; ++i) {
         size_t n = p + L * i;
-        taps_[p][i] = n < kProtoTaps ? L * prototype[n] : 0.0f;
+        taps_[p][i] = n < TAPS ? L * prototype[n] : 0.0f;
       }
     }
     for (size_t i = 0; i < 2 * kTapsPerPhase; ++i) {
@@ -156,6 +160,44 @@ class Upsampler {
  private:
   Resampler<3, 2> resampler_;
   int phase_;
+};
+
+// 48 kHz -> 96 kHz: two outputs per input, at 0 and 1 tick after it.
+template <size_t TAPS>
+class Upsampler2 {
+ public:
+  void Init(const float* prototype) { resampler_.Init(prototype); }
+  // out: l0, r0, l1, r1.
+  inline void Process(float l, float r, float* out) {
+    resampler_.Push(l, r);
+    resampler_.Read(0, &out[0], &out[1]);
+    resampler_.Read(1, &out[2], &out[3]);
+  }
+
+ private:
+  Resampler<2, 1, TAPS> resampler_;
+};
+
+// 96 kHz -> 48 kHz: lowpass at 96 kHz, keep every second sample.
+template <size_t TAPS>
+class Downsampler2 {
+ public:
+  void Init(const float* prototype) {
+    resampler_.Init(prototype);
+    odd_ = false;
+  }
+  // Returns true when a 48 kHz frame was produced.
+  inline bool Process(float l, float r, float* out_l, float* out_r) {
+    resampler_.Push(l, r);
+    odd_ = !odd_;
+    if (odd_) return false;
+    resampler_.Read(0, out_l, out_r);
+    return true;
+  }
+
+ private:
+  Resampler<1, 2, TAPS> resampler_;
+  bool odd_;
 };
 
 }  // namespace mi_glue

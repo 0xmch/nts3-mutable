@@ -163,7 +163,6 @@ button { font: inherit; color: inherit; }
 .knob .arc { fill: none; stroke: url(#arc-grad); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(125, 207, 255, .35)); }
 .knob .cap { fill: #1b2130; stroke: var(--line-strong); }
 .knob .tick { stroke: var(--fg); stroke-width: 2.5; stroke-linecap: round; }
-.ctl.mapped .knob { cursor: default; }
 .ctl.select { grid-column: span 2; text-align: left; padding: 9px 10px 9px; }
 .ctl.select.wide { grid-column: 1 / -1; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }

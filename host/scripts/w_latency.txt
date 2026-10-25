@@ -1,0 +1,6 @@
+0.0 param 0 0
+0.0 param 1 1000
+0.0 param 2 1000
+0.0 param 4 0
+0.0 param 5 600
+0.0 param 6 600

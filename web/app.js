@@ -181,7 +181,18 @@ function setParam(id, value, { fromPad = false } = {}) {
   state.values[id] = value;
   post({ type: 'param', id, value });
   updateControl(id);
-  if (!fromPad) updateAxes();
+  if (!fromPad) {
+    // A knob on a pad axis or the depth slider moves that control with it.
+    if (p.map.assign === ASSIGN.X) state.pad.x = unmapLinear(p.map, value);
+    if (p.map.assign === ASSIGN.Y) state.pad.y = unmapLinear(p.map, value);
+    if (p.map.assign === ASSIGN.DEPTH) {
+      state.depth = unmapLinear(p.map, value);
+      $('depth').value = state.depth;
+      $('depth').style.setProperty('--fill', `${state.depth * 100}%`);
+      $('depth-value').textContent = formatValue(p, value);
+    }
+    updateAxes();
+  }
   saveUrl();
 }
 
@@ -293,13 +304,9 @@ function buildControls() {
       knob.setAttribute('aria-label', p.name);
       knob.setAttribute('aria-valuemin', p.min);
       knob.setAttribute('aria-valuemax', p.max);
-      if (badge) {
-        knob.setAttribute('aria-disabled', 'true');
-        cell.title = `${p.name} follows the ${badge[1] === 'DEPTH' ? 'depth slider' : `pad ${badge[1]}`}`;
-      } else {
-        knob.setAttribute('tabindex', '0');
-        bindKnob(knob, id);
-      }
+      knob.setAttribute('tabindex', '0');
+      bindKnob(knob, id);
+      if (badge) cell.title = `${p.name} is on the ${badge[1] === 'DEPTH' ? 'depth slider' : `pad's ${badge[1]} axis`}`;
     }
     if (badge) {
       const b = document.createElement('span');
