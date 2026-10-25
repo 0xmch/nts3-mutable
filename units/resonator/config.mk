@@ -36,3 +36,6 @@ UDEFS = -DM_PI=3.14159265358979323846
 # the real unit_* symbols at link time.
 UDEFS += -ffunction-sections -fdata-sections
 UCXXDEFS = -fvisibility=hidden -fvisibility-inlines-hidden
+
+# Browser simulator build: stmlib's portable code paths (no ARM assembly).
+UWASMDEFS = -DTEST -DM_PI=3.14159265358979323846

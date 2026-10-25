@@ -6,14 +6,8 @@
 #   scripts/build.sh resonator  # one unit
 set -euo pipefail
 
-HOST=${NTS3_BUILD_HOST:-pc}
-REMOTE=src/nts3-mutable-build
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-if [ $# -gt 0 ]; then UNITS=("$@"); else UNITS=($(ls "$ROOT/units")); fi
-
-COPYFILE_DISABLE=1 tar --no-xattrs -C "$ROOT" --exclude build --exclude dist --exclude sim \
-  --exclude '*.nts3unit' --exclude .git -cf - . |
-  ssh "$HOST" "bash -c 'rm -rf ~/$REMOTE && mkdir -p ~/$REMOTE && tar -C ~/$REMOTE -xf -'"
+if [ $# -gt 0 ]; then UNITS=("$@"); else UNITS=($(ls "$(dirname "$0")/../units")); fi
+source "$(dirname "$0")/sync.sh"
 
 mkdir -p "$ROOT/dist"
 SIZE='~/src/logue-sdk/tools/gcc/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-size'

@@ -1,6 +1,8 @@
 # nts3-mutable: the logue SDK NTS-3 dummy-genericfx Makefile (BSD 3-Clause,
 # KORG), with SDK paths taken from $(LOGUE_SDK) so units can live outside
-# the SDK tree, and UCXXDEFS for C++-only flags.
+# the SDK tree, UCXXDEFS for C++-only flags and UWASMDEFS for the websim
+# build. `make wasm` no longer launches emrun (scripts/sim.sh serves the page)
+# and starts the page volume at 0.05 instead of 0.5.
 
 LOGUE_SDK ?= $(HOME)/src/logue-sdk
 
@@ -257,7 +259,7 @@ wasm:
 	@cp -r $(SANDBOXDIR)/scripts $(WASMDIR)/
 	@cp -r $(SANDBOXDIR)/images $(WASMDIR)/
 	@cp -r $(WASMSRC) $(WASMDIR)/
-	@$(EMCC_BIN_PATH)/emcc -Wno-unknown-attributes -Wno-limited-postlink-optimizations $(INCDIR) \
+	@$(EMCC_BIN_PATH)/emcc -Wno-unknown-attributes -Wno-limited-postlink-optimizations $(INCDIR) $(UWASMDEFS) \
 		-s AUDIO_WORKLET=1 \
 		-s WASM_WORKERS=1 \
 		-lembind \
@@ -267,6 +269,5 @@ wasm:
 		-g -fdebug-compilation-dir='..' \
 		$(WASMSRC) \
 		-o $(WASMDIR)/$(PROJECT).html
+	@sed -i.bak 's/value=0.5 step=0.01 id="VolumeSlider"/value=0.05 step=0.01 id="VolumeSlider"/' $(WASMDIR)/$(PROJECT).html && rm -f $(WASMDIR)/$(PROJECT).html.bak
 	@echo Done
-	@echo Opening the sandbox
-	@$(EMCC_BIN_PATH)/emrun --browser chrome --serve_after_close $(WASMDIR)/$(PROJECT).html
