@@ -106,33 +106,102 @@ function buildBeat(ctx) {
   }
 }
 
-// Four bars of pads: Am9, Fmaj7, Cmaj7, G6, two detuned saws per note.
+// Four bars of neo-soul voicings: Dm9, G13sus (the same upper notes over G),
+// Cmaj9, Am11. Supersaw pads bloom through a low-pass on each bar and pump on
+// the beat like a sidechained pad, over a sine sub, with a quiet bell
+// arpeggio through a ping-pong delay. Only node-to-node connections: audio
+// extensions that wrap AudioNode.connect break connections to an AudioParam.
 function buildChords(ctx) {
-  const chords = [
-    [45, 52, 55, 59, 60],
-    [41, 48, 52, 57, 64],
-    [48, 52, 55, 59, 62],
-    [43, 50, 55, 59, 64],
-  ];
   const bar = 16 * SIXTEENTH;
-  const filter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 1500, Q: 0.7 });
-  filter.connect(ctx.destination);
-  chords.forEach((chord, i) => {
+  const beat = 4 * SIXTEENTH;
+  const chords = [
+    { root: 38, notes: [53, 57, 60, 64] }, // Dm9: F A C E over D
+    { root: 43, notes: [53, 57, 60, 64] }, // G13sus: F A C E over G
+    { root: 36, notes: [52, 55, 59, 62] }, // Cmaj9: E G B D over C
+    { root: 45, notes: [55, 60, 62, 64] }, // Am11: G C D E over A
+  ];
+
+  // Pad bus: low-pass that opens over each bar, then a beat-synced pump.
+  const filter = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 700, Q: 0.9 });
+  const pump = new GainNode(ctx, { gain: 1 });
+  filter.connect(pump).connect(ctx.destination);
+  chords.forEach((_, i) => {
     const t = i * bar;
-    chord.forEach((note, k) => {
-      for (const detune of [-7, 7]) {
+    filter.frequency.setValueAtTime(650, t);
+    filter.frequency.exponentialRampToValueAtTime(3400, t + bar * 0.55);
+    filter.frequency.exponentialRampToValueAtTime(1300, t + bar);
+  });
+  for (let b = 0; b < 16; b++) {
+    const t = b * beat;
+    pump.gain.setValueAtTime(0.42, t);
+    pump.gain.setTargetAtTime(1, t + 0.02, 0.09);
+  }
+
+  chords.forEach(({ root, notes }, i) => {
+    const t = i * bar;
+    // Three detuned saws per note, spread across the stereo field.
+    notes.forEach((note, k) => {
+      [[-14, -0.75], [0, (k % 2 ? 0.2 : -0.2)], [14, 0.75]].forEach(([detune, pan]) => {
         const osc = new OscillatorNode(ctx, { type: 'sawtooth', frequency: midiToHz(note), detune });
         const amp = new GainNode(ctx, { gain: 0 });
-        const pan = new StereoPannerNode(ctx, { pan: (detune > 0 ? 0.35 : -0.35) * (k % 2 ? 1 : 0.6) });
+        const panner = new StereoPannerNode(ctx, { pan });
         amp.gain.setValueAtTime(0, t);
-        amp.gain.linearRampToValueAtTime(0.05, t + 0.08);
-        amp.gain.setValueAtTime(0.05, t + bar - 0.05);
-        amp.gain.exponentialRampToValueAtTime(0.0001, t + bar + 0.7);
-        osc.connect(amp).connect(pan).connect(filter);
+        amp.gain.linearRampToValueAtTime(0.032, t + 0.35);
+        amp.gain.setValueAtTime(0.032, t + bar - 0.1);
+        amp.gain.exponentialRampToValueAtTime(0.0001, t + bar + 0.9);
+        osc.connect(amp).connect(panner).connect(filter);
         osc.start(t);
-        osc.stop(t + bar + 0.8);
-      }
+        osc.stop(t + bar + 1);
+      });
     });
+    // Sine sub on the root, ducked with the pads.
+    const sub = new OscillatorNode(ctx, { type: 'sine', frequency: midiToHz(root) });
+    const subAmp = new GainNode(ctx, { gain: 0 });
+    subAmp.gain.setValueAtTime(0, t);
+    subAmp.gain.linearRampToValueAtTime(0.22, t + 0.06);
+    subAmp.gain.setValueAtTime(0.22, t + bar - 0.08);
+    subAmp.gain.linearRampToValueAtTime(0, t + bar);
+    sub.connect(subAmp).connect(pump);
+    sub.start(t);
+    sub.stop(t + bar + 0.05);
+  });
+
+  // Ping-pong delay, dotted eighths, for the bells.
+  const send = new GainNode(ctx, { gain: 1 });
+  const left = new DelayNode(ctx, { delayTime: 3 * SIXTEENTH, maxDelayTime: 1 });
+  const right = new DelayNode(ctx, { delayTime: 3 * SIXTEENTH, maxDelayTime: 1 });
+  const feedLeft = new GainNode(ctx, { gain: 0.42 });
+  const feedRight = new GainNode(ctx, { gain: 0.42 });
+  const dark = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 3800 });
+  const panLeft = new StereoPannerNode(ctx, { pan: -0.8 });
+  const panRight = new StereoPannerNode(ctx, { pan: 0.8 });
+  const wet = new GainNode(ctx, { gain: 0.5 });
+  send.connect(dark).connect(left);
+  left.connect(panLeft).connect(wet);
+  left.connect(feedLeft).connect(right);
+  right.connect(panRight).connect(wet);
+  right.connect(feedRight).connect(left);
+  wet.connect(ctx.destination);
+
+  // Bell arpeggio on the upper chord tones, an octave up, on the off-beats.
+  const pattern = [0, 2, 1, 3, 2, 0, 3, 1];
+  chords.forEach(({ notes }, i) => {
+    for (let step = 0; step < 8; step++) {
+      if (step % 2 === 0 && step !== 6) continue;
+      const t = i * bar + step * 2 * SIXTEENTH;
+      const f = midiToHz(notes[pattern[step]] + 12);
+      const bell = new GainNode(ctx, { gain: 1 });
+      bell.connect(ctx.destination);
+      bell.connect(send);
+      for (const [ratio, level, decay] of [[1, 0.09, 0.8], [3.01, 0.025, 0.25], [6.98, 0.008, 0.08]]) {
+        const osc = new OscillatorNode(ctx, { type: 'sine', frequency: f * ratio });
+        const amp = new GainNode(ctx, { gain: 0 });
+        envelope(ctx, amp, t, level, 0.003, decay);
+        osc.connect(amp).connect(bell);
+        osc.start(t);
+        osc.stop(t + decay + 0.05);
+      }
+    }
   });
 }
 
@@ -174,8 +243,8 @@ function buildNoise(ctx) {
 }
 
 export const SOURCES = [
+  { id: 'chords', label: 'Chords', hint: 'neo-soul pads, sub and bells', seconds: 64 * SIXTEENTH, tail: 2.5, build: buildChords },
   { id: 'beat', label: 'Beat', hint: 'two bars of drums', seconds: 32 * SIXTEENTH, tail: 0.6, build: buildBeat },
-  { id: 'chords', label: 'Chords', hint: 'four bars of pads', seconds: 64 * SIXTEENTH, tail: 0.9, build: buildChords },
   { id: 'plucks', label: 'Plucks', hint: 'mallet notes', seconds: 32 * SIXTEENTH, tail: 1.0, build: buildPlucks },
   { id: 'noise', label: 'Noise', hint: 'slow noise swells', seconds: 8, tail: 0, build: buildNoise },
 ];

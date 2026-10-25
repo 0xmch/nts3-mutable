@@ -9,7 +9,7 @@ import { SOURCES, renderSources } from './sources.js';
 
 const UNITS = [
   {
-    id: 'resonator', title: 'Resonator', short: 'Resonator', module: 'Rings', source: 'beat', touchLabel: 'strum', ripples: true,
+    id: 'resonator', title: 'Resonator', short: 'Resonator', module: 'Rings', source: 'chords', touchLabel: 'strum', ripples: true,
     blurb: 'A bank of tuned modal filters or digital strings that the input sets ringing. Six models, up to four voices.',
     how: 'X picks the note, Y the structure. Each touch strums a new voice, and so does dragging to a new semitone. With Silence as the input, a tap plucks the strings.',
   },
@@ -19,12 +19,12 @@ const UNITS = [
     how: 'Touch to freeze the buffer and drag to scrub through it; release to let new audio in. X is the position, Y the grain size. With Density at 50%, each tap plays one grain.',
   },
   {
-    id: 'texture_stretch', title: 'Texture Stretch', short: 'Stretch', module: 'Clouds · stretch', source: 'plucks', touchLabel: 'freeze',
+    id: 'texture_stretch', title: 'Texture Stretch', short: 'Stretch', module: 'Clouds · stretch', source: 'chords', touchLabel: 'freeze',
     blurb: 'Time-stretches and pitch-shifts the last second of input with WSOLA (waveform-similarity overlap-add).',
     how: 'Touch to freeze, then drag X through the frozen second. Y sets the window size, Density adds diffusion, and Texture sweeps a low-pass or high-pass filter.',
   },
   {
-    id: 'texture_loop', title: 'Texture Loop', short: 'Loop', module: 'Clouds · looping delay', source: 'beat', touchLabel: 'loop',
+    id: 'texture_loop', title: 'Texture Loop', short: 'Loop', module: 'Clouds · looping delay', source: 'chords', touchLabel: 'loop',
     blurb: 'A delay that turns into a looper, with a pitch shifter on its output.',
     how: 'X sets the delay time. Touch to capture a loop and keep it playing; Y sets its length and Pitch transposes it.',
   },
