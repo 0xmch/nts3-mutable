@@ -1,0 +1,15 @@
+0.0 param 6 5
+# No input: the internal exciter plucks on touch, slides strum per semitone.
+0.0 param 0 48
+0.2 touch began
+0.3 touch ended
+1.5 param 0 55
+1.5 touch began
+1.6 touch ended
+3.0 touch began
+3.0 param 0 48
+3.1 param 0 50
+3.2 param 0 52
+3.3 param 0 55
+3.4 param 0 57
+3.5 touch ended

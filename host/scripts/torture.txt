@@ -1,0 +1,722 @@
+0.0 param 4 1000
+0.0 param 2 1000
+0.00 param 6 0
+0.00 param 7 0
+0.00 param 1 0
+0.00 param 3 0
+0.00 param 5 0
+0.00 param 0 24
+0.00 touch began
+0.05 touch ended
+0.33 param 6 0
+0.33 param 7 0
+0.33 param 1 1000
+0.33 param 3 1000
+0.33 param 5 1000
+0.33 param 0 96
+0.33 touch began
+0.38 touch ended
+0.66 param 6 0
+0.66 param 7 0
+0.66 param 1 500
+0.66 param 3 1000
+0.66 param 5 0
+0.66 param 0 60
+0.66 touch began
+0.71 touch ended
+0.99 param 6 0
+0.99 param 7 0
+0.99 param 1 0
+0.99 param 3 1000
+0.99 param 5 1000
+0.99 param 0 36
+0.99 touch began
+1.04 touch ended
+1.32 param 6 0
+1.32 param 7 0
+1.32 param 1 1000
+1.32 param 3 0
+1.32 param 5 500
+1.32 param 0 84
+1.32 touch began
+1.37 touch ended
+1.65 param 6 0
+1.65 param 7 1
+1.65 param 1 0
+1.65 param 3 0
+1.65 param 5 0
+1.65 param 0 24
+1.65 touch began
+1.70 touch ended
+1.98 param 6 0
+1.98 param 7 1
+1.98 param 1 1000
+1.98 param 3 1000
+1.98 param 5 1000
+1.98 param 0 96
+1.98 touch began
+2.03 touch ended
+2.31 param 6 0
+2.31 param 7 1
+2.31 param 1 500
+2.31 param 3 1000
+2.31 param 5 0
+2.31 param 0 60
+2.31 touch began
+2.36 touch ended
+2.64 param 6 0
+2.64 param 7 1
+2.64 param 1 0
+2.64 param 3 1000
+2.64 param 5 1000
+2.64 param 0 36
+2.64 touch began
+2.69 touch ended
+2.97 param 6 0
+2.97 param 7 1
+2.97 param 1 1000
+2.97 param 3 0
+2.97 param 5 500
+2.97 param 0 84
+2.97 touch began
+3.02 touch ended
+3.30 param 6 0
+3.30 param 7 2
+3.30 param 1 0
+3.30 param 3 0
+3.30 param 5 0
+3.30 param 0 24
+3.30 touch began
+3.35 touch ended
+3.63 param 6 0
+3.63 param 7 2
+3.63 param 1 1000
+3.63 param 3 1000
+3.63 param 5 1000
+3.63 param 0 96
+3.63 touch began
+3.68 touch ended
+3.96 param 6 0
+3.96 param 7 2
+3.96 param 1 500
+3.96 param 3 1000
+3.96 param 5 0
+3.96 param 0 60
+3.96 touch began
+4.01 touch ended
+4.29 param 6 0
+4.29 param 7 2
+4.29 param 1 0
+4.29 param 3 1000
+4.29 param 5 1000
+4.29 param 0 36
+4.29 touch began
+4.34 touch ended
+4.62 param 6 0
+4.62 param 7 2
+4.62 param 1 1000
+4.62 param 3 0
+4.62 param 5 500
+4.62 param 0 84
+4.62 touch began
+4.67 touch ended
+4.95 param 6 1
+4.95 param 7 0
+4.95 param 1 0
+4.95 param 3 0
+4.95 param 5 0
+4.95 param 0 24
+4.95 touch began
+5.00 touch ended
+5.28 param 6 1
+5.28 param 7 0
+5.28 param 1 1000
+5.28 param 3 1000
+5.28 param 5 1000
+5.28 param 0 96
+5.28 touch began
+5.33 touch ended
+5.61 param 6 1
+5.61 param 7 0
+5.61 param 1 500
+5.61 param 3 1000
+5.61 param 5 0
+5.61 param 0 60
+5.61 touch began
+5.66 touch ended
+5.94 param 6 1
+5.94 param 7 0
+5.94 param 1 0
+5.94 param 3 1000
+5.94 param 5 1000
+5.94 param 0 36
+5.94 touch began
+5.99 touch ended
+6.27 param 6 1
+6.27 param 7 0
+6.27 param 1 1000
+6.27 param 3 0
+6.27 param 5 500
+6.27 param 0 84
+6.27 touch began
+6.32 touch ended
+6.60 param 6 1
+6.60 param 7 1
+6.60 param 1 0
+6.60 param 3 0
+6.60 param 5 0
+6.60 param 0 24
+6.60 touch began
+6.65 touch ended
+6.93 param 6 1
+6.93 param 7 1
+6.93 param 1 1000
+6.93 param 3 1000
+6.93 param 5 1000
+6.93 param 0 96
+6.93 touch began
+6.98 touch ended
+7.26 param 6 1
+7.26 param 7 1
+7.26 param 1 500
+7.26 param 3 1000
+7.26 param 5 0
+7.26 param 0 60
+7.26 touch began
+7.31 touch ended
+7.59 param 6 1
+7.59 param 7 1
+7.59 param 1 0
+7.59 param 3 1000
+7.59 param 5 1000
+7.59 param 0 36
+7.59 touch began
+7.64 touch ended
+7.92 param 6 1
+7.92 param 7 1
+7.92 param 1 1000
+7.92 param 3 0
+7.92 param 5 500
+7.92 param 0 84
+7.92 touch began
+7.97 touch ended
+8.25 param 6 1
+8.25 param 7 2
+8.25 param 1 0
+8.25 param 3 0
+8.25 param 5 0
+8.25 param 0 24
+8.25 touch began
+8.30 touch ended
+8.58 param 6 1
+8.58 param 7 2
+8.58 param 1 1000
+8.58 param 3 1000
+8.58 param 5 1000
+8.58 param 0 96
+8.58 touch began
+8.63 touch ended
+8.91 param 6 1
+8.91 param 7 2
+8.91 param 1 500
+8.91 param 3 1000
+8.91 param 5 0
+8.91 param 0 60
+8.91 touch began
+8.96 touch ended
+9.24 param 6 1
+9.24 param 7 2
+9.24 param 1 0
+9.24 param 3 1000
+9.24 param 5 1000
+9.24 param 0 36
+9.24 touch began
+9.29 touch ended
+9.57 param 6 1
+9.57 param 7 2
+9.57 param 1 1000
+9.57 param 3 0
+9.57 param 5 500
+9.57 param 0 84
+9.57 touch began
+9.62 touch ended
+9.90 param 6 2
+9.90 param 7 0
+9.90 param 1 0
+9.90 param 3 0
+9.90 param 5 0
+9.90 param 0 24
+9.90 touch began
+9.95 touch ended
+10.23 param 6 2
+10.23 param 7 0
+10.23 param 1 1000
+10.23 param 3 1000
+10.23 param 5 1000
+10.23 param 0 96
+10.23 touch began
+10.28 touch ended
+10.56 param 6 2
+10.56 param 7 0
+10.56 param 1 500
+10.56 param 3 1000
+10.56 param 5 0
+10.56 param 0 60
+10.56 touch began
+10.61 touch ended
+10.89 param 6 2
+10.89 param 7 0
+10.89 param 1 0
+10.89 param 3 1000
+10.89 param 5 1000
+10.89 param 0 36
+10.89 touch began
+10.94 touch ended
+11.22 param 6 2
+11.22 param 7 0
+11.22 param 1 1000
+11.22 param 3 0
+11.22 param 5 500
+11.22 param 0 84
+11.22 touch began
+11.27 touch ended
+11.55 param 6 2
+11.55 param 7 1
+11.55 param 1 0
+11.55 param 3 0
+11.55 param 5 0
+11.55 param 0 24
+11.55 touch began
+11.60 touch ended
+11.88 param 6 2
+11.88 param 7 1
+11.88 param 1 1000
+11.88 param 3 1000
+11.88 param 5 1000
+11.88 param 0 96
+11.88 touch began
+11.93 touch ended
+12.21 param 6 2
+12.21 param 7 1
+12.21 param 1 500
+12.21 param 3 1000
+12.21 param 5 0
+12.21 param 0 60
+12.21 touch began
+12.26 touch ended
+12.54 param 6 2
+12.54 param 7 1
+12.54 param 1 0
+12.54 param 3 1000
+12.54 param 5 1000
+12.54 param 0 36
+12.54 touch began
+12.59 touch ended
+12.87 param 6 2
+12.87 param 7 1
+12.87 param 1 1000
+12.87 param 3 0
+12.87 param 5 500
+12.87 param 0 84
+12.87 touch began
+12.92 touch ended
+13.20 param 6 2
+13.20 param 7 2
+13.20 param 1 0
+13.20 param 3 0
+13.20 param 5 0
+13.20 param 0 24
+13.20 touch began
+13.25 touch ended
+13.53 param 6 2
+13.53 param 7 2
+13.53 param 1 1000
+13.53 param 3 1000
+13.53 param 5 1000
+13.53 param 0 96
+13.53 touch began
+13.58 touch ended
+13.86 param 6 2
+13.86 param 7 2
+13.86 param 1 500
+13.86 param 3 1000
+13.86 param 5 0
+13.86 param 0 60
+13.86 touch began
+13.91 touch ended
+14.19 param 6 2
+14.19 param 7 2
+14.19 param 1 0
+14.19 param 3 1000
+14.19 param 5 1000
+14.19 param 0 36
+14.19 touch began
+14.24 touch ended
+14.52 param 6 2
+14.52 param 7 2
+14.52 param 1 1000
+14.52 param 3 0
+14.52 param 5 500
+14.52 param 0 84
+14.52 touch began
+14.57 touch ended
+14.85 param 6 3
+14.85 param 7 0
+14.85 param 1 0
+14.85 param 3 0
+14.85 param 5 0
+14.85 param 0 24
+14.85 touch began
+14.90 touch ended
+15.18 param 6 3
+15.18 param 7 0
+15.18 param 1 1000
+15.18 param 3 1000
+15.18 param 5 1000
+15.18 param 0 96
+15.18 touch began
+15.23 touch ended
+15.51 param 6 3
+15.51 param 7 0
+15.51 param 1 500
+15.51 param 3 1000
+15.51 param 5 0
+15.51 param 0 60
+15.51 touch began
+15.56 touch ended
+15.84 param 6 3
+15.84 param 7 0
+15.84 param 1 0
+15.84 param 3 1000
+15.84 param 5 1000
+15.84 param 0 36
+15.84 touch began
+15.89 touch ended
+16.17 param 6 3
+16.17 param 7 0
+16.17 param 1 1000
+16.17 param 3 0
+16.17 param 5 500
+16.17 param 0 84
+16.17 touch began
+16.22 touch ended
+16.50 param 6 3
+16.50 param 7 1
+16.50 param 1 0
+16.50 param 3 0
+16.50 param 5 0
+16.50 param 0 24
+16.50 touch began
+16.55 touch ended
+16.83 param 6 3
+16.83 param 7 1
+16.83 param 1 1000
+16.83 param 3 1000
+16.83 param 5 1000
+16.83 param 0 96
+16.83 touch began
+16.88 touch ended
+17.16 param 6 3
+17.16 param 7 1
+17.16 param 1 500
+17.16 param 3 1000
+17.16 param 5 0
+17.16 param 0 60
+17.16 touch began
+17.21 touch ended
+17.49 param 6 3
+17.49 param 7 1
+17.49 param 1 0
+17.49 param 3 1000
+17.49 param 5 1000
+17.49 param 0 36
+17.49 touch began
+17.54 touch ended
+17.82 param 6 3
+17.82 param 7 1
+17.82 param 1 1000
+17.82 param 3 0
+17.82 param 5 500
+17.82 param 0 84
+17.82 touch began
+17.87 touch ended
+18.15 param 6 3
+18.15 param 7 2
+18.15 param 1 0
+18.15 param 3 0
+18.15 param 5 0
+18.15 param 0 24
+18.15 touch began
+18.20 touch ended
+18.48 param 6 3
+18.48 param 7 2
+18.48 param 1 1000
+18.48 param 3 1000
+18.48 param 5 1000
+18.48 param 0 96
+18.48 touch began
+18.53 touch ended
+18.81 param 6 3
+18.81 param 7 2
+18.81 param 1 500
+18.81 param 3 1000
+18.81 param 5 0
+18.81 param 0 60
+18.81 touch began
+18.86 touch ended
+19.14 param 6 3
+19.14 param 7 2
+19.14 param 1 0
+19.14 param 3 1000
+19.14 param 5 1000
+19.14 param 0 36
+19.14 touch began
+19.19 touch ended
+19.47 param 6 3
+19.47 param 7 2
+19.47 param 1 1000
+19.47 param 3 0
+19.47 param 5 500
+19.47 param 0 84
+19.47 touch began
+19.52 touch ended
+19.80 param 6 4
+19.80 param 7 0
+19.80 param 1 0
+19.80 param 3 0
+19.80 param 5 0
+19.80 param 0 24
+19.80 touch began
+19.85 touch ended
+20.13 param 6 4
+20.13 param 7 0
+20.13 param 1 1000
+20.13 param 3 1000
+20.13 param 5 1000
+20.13 param 0 96
+20.13 touch began
+20.18 touch ended
+20.46 param 6 4
+20.46 param 7 0
+20.46 param 1 500
+20.46 param 3 1000
+20.46 param 5 0
+20.46 param 0 60
+20.46 touch began
+20.51 touch ended
+20.79 param 6 4
+20.79 param 7 0
+20.79 param 1 0
+20.79 param 3 1000
+20.79 param 5 1000
+20.79 param 0 36
+20.79 touch began
+20.84 touch ended
+21.12 param 6 4
+21.12 param 7 0
+21.12 param 1 1000
+21.12 param 3 0
+21.12 param 5 500
+21.12 param 0 84
+21.12 touch began
+21.17 touch ended
+21.45 param 6 4
+21.45 param 7 1
+21.45 param 1 0
+21.45 param 3 0
+21.45 param 5 0
+21.45 param 0 24
+21.45 touch began
+21.50 touch ended
+21.78 param 6 4
+21.78 param 7 1
+21.78 param 1 1000
+21.78 param 3 1000
+21.78 param 5 1000
+21.78 param 0 96
+21.78 touch began
+21.83 touch ended
+22.11 param 6 4
+22.11 param 7 1
+22.11 param 1 500
+22.11 param 3 1000
+22.11 param 5 0
+22.11 param 0 60
+22.11 touch began
+22.16 touch ended
+22.44 param 6 4
+22.44 param 7 1
+22.44 param 1 0
+22.44 param 3 1000
+22.44 param 5 1000
+22.44 param 0 36
+22.44 touch began
+22.49 touch ended
+22.77 param 6 4
+22.77 param 7 1
+22.77 param 1 1000
+22.77 param 3 0
+22.77 param 5 500
+22.77 param 0 84
+22.77 touch began
+22.82 touch ended
+23.10 param 6 4
+23.10 param 7 2
+23.10 param 1 0
+23.10 param 3 0
+23.10 param 5 0
+23.10 param 0 24
+23.10 touch began
+23.15 touch ended
+23.43 param 6 4
+23.43 param 7 2
+23.43 param 1 1000
+23.43 param 3 1000
+23.43 param 5 1000
+23.43 param 0 96
+23.43 touch began
+23.48 touch ended
+23.76 param 6 4
+23.76 param 7 2
+23.76 param 1 500
+23.76 param 3 1000
+23.76 param 5 0
+23.76 param 0 60
+23.76 touch began
+23.81 touch ended
+24.09 param 6 4
+24.09 param 7 2
+24.09 param 1 0
+24.09 param 3 1000
+24.09 param 5 1000
+24.09 param 0 36
+24.09 touch began
+24.14 touch ended
+24.42 param 6 4
+24.42 param 7 2
+24.42 param 1 1000
+24.42 param 3 0
+24.42 param 5 500
+24.42 param 0 84
+24.42 touch began
+24.47 touch ended
+24.75 param 6 5
+24.75 param 7 0
+24.75 param 1 0
+24.75 param 3 0
+24.75 param 5 0
+24.75 param 0 24
+24.75 touch began
+24.80 touch ended
+25.08 param 6 5
+25.08 param 7 0
+25.08 param 1 1000
+25.08 param 3 1000
+25.08 param 5 1000
+25.08 param 0 96
+25.08 touch began
+25.13 touch ended
+25.41 param 6 5
+25.41 param 7 0
+25.41 param 1 500
+25.41 param 3 1000
+25.41 param 5 0
+25.41 param 0 60
+25.41 touch began
+25.46 touch ended
+25.74 param 6 5
+25.74 param 7 0
+25.74 param 1 0
+25.74 param 3 1000
+25.74 param 5 1000
+25.74 param 0 36
+25.74 touch began
+25.79 touch ended
+26.07 param 6 5
+26.07 param 7 0
+26.07 param 1 1000
+26.07 param 3 0
+26.07 param 5 500
+26.07 param 0 84
+26.07 touch began
+26.12 touch ended
+26.40 param 6 5
+26.40 param 7 1
+26.40 param 1 0
+26.40 param 3 0
+26.40 param 5 0
+26.40 param 0 24
+26.40 touch began
+26.45 touch ended
+26.73 param 6 5
+26.73 param 7 1
+26.73 param 1 1000
+26.73 param 3 1000
+26.73 param 5 1000
+26.73 param 0 96
+26.73 touch began
+26.78 touch ended
+27.06 param 6 5
+27.06 param 7 1
+27.06 param 1 500
+27.06 param 3 1000
+27.06 param 5 0
+27.06 param 0 60
+27.06 touch began
+27.11 touch ended
+27.39 param 6 5
+27.39 param 7 1
+27.39 param 1 0
+27.39 param 3 1000
+27.39 param 5 1000
+27.39 param 0 36
+27.39 touch began
+27.44 touch ended
+27.72 param 6 5
+27.72 param 7 1
+27.72 param 1 1000
+27.72 param 3 0
+27.72 param 5 500
+27.72 param 0 84
+27.72 touch began
+27.77 touch ended
+28.05 param 6 5
+28.05 param 7 2
+28.05 param 1 0
+28.05 param 3 0
+28.05 param 5 0
+28.05 param 0 24
+28.05 touch began
+28.10 touch ended
+28.38 param 6 5
+28.38 param 7 2
+28.38 param 1 1000
+28.38 param 3 1000
+28.38 param 5 1000
+28.38 param 0 96
+28.38 touch began
+28.43 touch ended
+28.71 param 6 5
+28.71 param 7 2
+28.71 param 1 500
+28.71 param 3 1000
+28.71 param 5 0
+28.71 param 0 60
+28.71 touch began
+28.76 touch ended
+29.04 param 6 5
+29.04 param 7 2
+29.04 param 1 0
+29.04 param 3 1000
+29.04 param 5 1000
+29.04 param 0 36
+29.04 touch began
+29.09 touch ended
+29.37 param 6 5
+29.37 param 7 2
+29.37 param 1 1000
+29.37 param 3 0
+29.37 param 5 500
+29.37 param 0 84
+29.37 touch began
+29.42 touch ended

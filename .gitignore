@@ -1,0 +1,7 @@
+build/
+dist/
+sim/
+*.nts3unit
+host/build/
+host/inputs/
+host/out/

@@ -1,0 +1,6 @@
+0.0 param 6 1
+0.0 param 2 1000
+0.0 param 0 48
+0.5 touch began
+0.6 touch ended
+4.0 param 0 55
