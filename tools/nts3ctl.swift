@@ -4,12 +4,19 @@
 //
 //   nts3ctl probe                  device, user API version, slot list
 //   nts3ctl slot <n>               one user slot (with -v: raw messages)
+//   nts3ctl load <file> <slot>     upload a .nts3unit into an empty user slot
+//   nts3ctl clear <slot>           clear a user slot holding one of our units
+//   nts3ctl fetch <slot> <prefix>  save the device's slot data messages
 //   nts3ctl program                current program: the unit in each FX slot
 //   nts3ctl cc <cc> <value> ...    send control changes (global channel)
 //
-// Read-only apart from cc. Units are loaded with KORG KONTROL Editor: the
-// USER SLOT DATA upload in the MIDI implementation (2024.09.03) is rejected by
-// firmware 1.01 with DATA FORMAT ERROR for real units.
+// USER SLOT DATA goes as numbered messages, which the MIDI implementation
+// (2024.09.03) does not show; this framing is copied from what firmware 1.04
+// itself sends back for a slot (fetch): F0 42 3g 00 01 72 4A 07 <slot>
+// <message index> <last index> <7-bit data> F7, at most 4096 bytes each,
+// every message packed on its own. The data is TABLE 5: size, CRC (0 in the
+// device's copy), then the unit file. load and clear only touch empty slots
+// and slots holding our developer ID (30784D43) unless --force is given.
 //
 // Build: swiftc -O tools/nts3ctl.swift -o tools/nts3ctl
 
@@ -120,6 +127,20 @@ final class Device {
 
 // 7-bit data (MIDI implementation, NOTE 1): each group of up to 7 bytes comes
 // as one byte of their top bits followed by the 7 low-bit bytes.
+func pack7(_ data: ArraySlice<UInt8>) -> [UInt8] {
+  var out: [UInt8] = []
+  var i = data.startIndex
+  while i < data.endIndex {
+    let group = data[i..<min(i + 7, data.endIndex)]
+    var msbs: UInt8 = 0
+    for (k, b) in group.enumerated() where b & 0x80 != 0 { msbs |= 1 << UInt8(k) }
+    out.append(msbs)
+    out.append(contentsOf: group.map { $0 & 0x7F })
+    i += 7
+  }
+  return out
+}
+
 
 func unpack7(_ data: ArraySlice<UInt8>) -> [UInt8] {
   var out: [UInt8] = []
@@ -208,15 +229,23 @@ final class NTS3 {
     let version: String
     let name: String
     let api: String
+    let params: [String]
   }
 
+  // Firmware 1.04 answers a USER SLOT STATUS REQUEST with an extra byte after
+  // the slot ID, then the unit's whole header (genericfx_unit_header_t, 376
+  // bytes) in place of the MIDI implementation's TABLE 4.
   func slot(_ index: Int) -> Slot? {
-    guard let r = request([0x19, genericfx, UInt8(index)], reply: 0x49), isReply(r, 0x49) else { return nil }
-    let d = unpack7(r[9..<(r.count - 1)])
-    guard d.count >= 32 else { return nil }
-    return Slot(index: index, developer: le32(d, 6), unit: le32(d, 10),
-                version: "\(d[14]).\(d[16]).\(d[17])", name: ascii(d[18..<32]),
-                api: "\(d[2]).\(d[4]).\(d[5])")
+    guard let r = request([0x19, genericfx, UInt8(index)], reply: 0x49), isReply(r, 0x49), r.count > 11 else { return nil }
+    let d = unpack7(r[10..<(r.count - 1)])
+    guard d.count >= 312, le32(d, 0) >= 312 else { return nil }
+    let v = le32(d, 20), api = le32(d, 8)
+    var params: [String] = []
+    for p in 0..<Int(min(le32(d, 52), 8)) { params.append(ascii(d[(56 + p * 32 + 10)..<(56 + p * 32 + 32)])) }
+    return Slot(index: index, developer: le32(d, 12), unit: le32(d, 16),
+                version: "\(v >> 16).\((v >> 8) & 0xFF).\(v & 0xFF)",
+                name: ascii(d[24..<44]),
+                api: "\(api >> 16).\((api >> 8) & 0xFF).\(api & 0xFF)", params: params)
   }
 
   func probe() {
@@ -233,12 +262,64 @@ final class NTS3 {
     var empty: [Int] = []
     for i in 0..<50 {
       if let s = slot(i) {
-        print(String(format: "  slot %2d: %-16@ dev %08X unit %X v%@ (api %@)", i, s.name as NSString, s.developer, s.unit, s.version as NSString, s.api as NSString))
+        print(String(format: "  slot %2d: %-16@ dev %08X unit %X v%@ api %@: %@", i, s.name as NSString, s.developer, s.unit, s.version as NSString, s.api as NSString, s.params.joined(separator: ", ") as NSString))
       } else {
         empty.append(i)
       }
     }
     print("empty slots: \(empty.isEmpty ? "none" : empty.map(String.init).joined(separator: " "))")
+  }
+
+  static let ourDeveloper: UInt32 = 0x30784D43
+  // Data bytes per USER SLOT DATA message: 510 full 7-bit groups plus 3, which
+  // makes 4096-byte messages, as the device sends them.
+  static let bytesPerMessage = 3573
+
+  func writable(_ index: Int, force: Bool) -> Bool {
+    guard let current = slot(index) else { return true }
+    if current.developer == NTS3.ourDeveloper || force { return true }
+    print("slot \(index) holds \"\(current.name)\" (dev \(String(format: "%08X", current.developer))); use --force to replace it")
+    return false
+  }
+
+  func load(_ path: String, slot index: Int, force: Bool) -> Bool {
+    guard let file = FileManager.default.contents(atPath: path) else {
+      print("cannot read \(path)"); return false
+    }
+    guard writable(index, force: force) else { return false }
+    let payload = [UInt8](file)
+    var data: [UInt8] = []
+    for k in 0..<4 { data.append(UInt8((UInt32(payload.count) >> (8 * UInt32(k))) & 0xFF)) }
+    data += [0, 0, 0, 0]  // CRC field: 0, as in the device's own copy
+    data += payload
+    let count = (data.count + NTS3.bytesPerMessage - 1) / NTS3.bytesPerMessage
+    for m in 0..<count {
+      let start = m * NTS3.bytesPerMessage
+      let chunk = data[start..<min(start + NTS3.bytesPerMessage, data.count)]
+      device.send(header() + [0x4A, genericfx, UInt8(index), UInt8(m), UInt8(count - 1)] + pack7(chunk) + [0xF7], to: destination)
+      // A status before the last message means the device stopped on an error.
+      let timeout = m == count - 1 ? 15.0 : 0.3
+      if let status = device.wait(timeout: timeout, { self.isStatus($0) }) {
+        if m < count - 1 || status[6] != 0x23 {
+          print("load \((path as NSString).lastPathComponent) -> slot \(index): \(describeStatus(status)) after message \(m + 1)/\(count)")
+          if status[6] != 0x23 { return false }
+        } else {
+          print("load \((path as NSString).lastPathComponent) -> slot \(index): \(describeStatus(status)) (\(payload.count) bytes, \(count) messages)")
+          return true
+        }
+      } else if m == count - 1 {
+        print("load \((path as NSString).lastPathComponent) -> slot \(index): no reply after the last message")
+        return false
+      }
+    }
+    return false
+  }
+
+  func clear(slot index: Int, force: Bool) -> Bool {
+    guard writable(index, force: force) else { return false }
+    let r = request([0x1B, genericfx, UInt8(index)], reply: 0x23)
+    print("clear slot \(index): \(describeStatus(r))")
+    return r.map { $0[6] == 0x23 } ?? false
   }
 
   func program() {
@@ -267,9 +348,10 @@ final class NTS3 {
 // MARK: - main
 
 let args = Array(CommandLine.arguments.dropFirst())
-let positional = args.filter { $0 != "-v" }
+let force = args.contains("--force")
+let positional = args.filter { $0 != "-v" && $0 != "--force" }
 guard let command = positional.first else {
-  print("usage: nts3ctl probe | slot <n> | program | cc <cc> <value> ...")
+  print("usage: nts3ctl probe | slot <n> | load <file> <slot> [--force] | clear <slot> [--force] | fetch <slot> <prefix> | program | cc <cc> <value> ...")
   exit(2)
 }
 let nts3 = NTS3()
@@ -278,10 +360,24 @@ guard nts3.connect() else { exit(1) }
 switch command {
 case "probe":
   nts3.probe()
+case "load" where positional.count == 3:
+  exit(nts3.load(positional[1], slot: Int(positional[2]) ?? -1, force: force) ? 0 : 1)
+case "clear" where positional.count == 2:
+  exit(nts3.clear(slot: Int(positional[1]) ?? -1, force: force) ? 0 : 1)
 case "slot" where positional.count == 2:
   _ = nts3.slot(Int(positional[1]) ?? 0)
 case "program":
   nts3.program()
+case "fetch" where positional.count == 3:
+  // Saves every USER SLOT DATA message the device sends for a slot.
+  nts3.device.send(nts3.header() + [0x1A, genericfx, UInt8(positional[1]) ?? 0, 0xF7], to: nts3.destination)
+  var n = 0
+  while let r = nts3.device.wait(timeout: 3.0, { nts3.isReply($0, 0x4A) || nts3.isStatus($0) }) {
+    print("message \(n): \(r.count) bytes, prefix " + r.prefix(14).map { String(format: "%02X", $0) }.joined(separator: " ") + " ... " + r.suffix(3).map { String(format: "%02X", $0) }.joined(separator: " "))
+    FileManager.default.createFile(atPath: positional[2] + ".\(n).syx", contents: Data(r))
+    n += 1
+  }
+  print("\(n) messages")
 case "cc" where positional.count >= 3 && positional.count % 2 == 1:
   var pairs: [(UInt8, UInt8)] = []
   var i = 1
