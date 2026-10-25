@@ -9,22 +9,22 @@ import { SOURCES, renderSources } from './sources.js';
 
 const UNITS = [
   {
-    id: 'resonator', title: 'Resonator', module: 'Rings', source: 'beat', touchLabel: 'strum', ripples: true,
+    id: 'resonator', title: 'Resonator', short: 'Resonator', module: 'Rings', source: 'beat', touchLabel: 'strum', ripples: true,
     blurb: 'A bank of tuned modal filters or digital strings that the input sets ringing. Six models, up to four voices.',
     how: 'X picks the note, Y the structure. Each touch strums a new voice, and so does dragging to a new semitone. With Silence as the input, a tap plucks the strings.',
   },
   {
-    id: 'texture', title: 'Texture', module: 'Clouds · granular', source: 'chords', touchLabel: 'freeze',
+    id: 'texture', title: 'Texture', short: 'Texture', module: 'Clouds · granular', source: 'chords', touchLabel: 'freeze',
     blurb: 'Plays overlapping grains taken from the last second of input.',
     how: 'Touch to freeze the buffer and drag to scrub through it; release to let new audio in. X is the position, Y the grain size. With Density at 50%, each tap plays one grain.',
   },
   {
-    id: 'texture_stretch', title: 'Texture Stretch', module: 'Clouds · stretch', source: 'plucks', touchLabel: 'freeze',
+    id: 'texture_stretch', title: 'Texture Stretch', short: 'Stretch', module: 'Clouds · stretch', source: 'plucks', touchLabel: 'freeze',
     blurb: 'Time-stretches and pitch-shifts the last second of input with WSOLA (waveform-similarity overlap-add).',
     how: 'Touch to freeze, then drag X through the frozen second. Y sets the window size, Density adds diffusion, and Texture sweeps a low-pass or high-pass filter.',
   },
   {
-    id: 'texture_loop', title: 'Texture Loop', module: 'Clouds · looping delay', source: 'beat', touchLabel: 'loop',
+    id: 'texture_loop', title: 'Texture Loop', short: 'Loop', module: 'Clouds · looping delay', source: 'beat', touchLabel: 'loop',
     blurb: 'A delay that turns into a looper, with a pitch shifter on its output.',
     how: 'X sets the delay time. Touch to capture a loop and keep it playing; Y sets its length and Pitch transposes it.',
   },
@@ -242,9 +242,10 @@ function buildTabs() {
     b.className = 'unit-tab';
     b.setAttribute('role', 'tab');
     b.dataset.unit = u.id;
-    b.innerHTML = `<span class="t"></span><span class="s"></span><span class="kbd">${i + 1}</span>`;
-    b.querySelector('.t').textContent = u.title;
+    b.innerHTML = '<span class="t"></span><span class="s"></span>';
+    b.querySelector('.t').textContent = u.short;
     b.querySelector('.s').textContent = u.module;
+    b.title = `${u.title} (${i + 1})`;
     b.addEventListener('click', () => selectUnit(u.id));
     nav.appendChild(b);
   });
@@ -284,7 +285,7 @@ function buildControls() {
         cell.querySelector('.chips').appendChild(chip);
       });
     } else {
-      cell.className = 'ctl' + (badge ? ' mapped' : '');
+      cell.className = 'ctl' + (badge ? ` mapped map-${badge[0]}` : '');
       cell.innerHTML = `<span class="name"></span>${knobSvg()}<span class="value"></span>`;
       cell.querySelector('.name').textContent = p.name;
       const knob = cell.querySelector('.knob');
@@ -411,6 +412,7 @@ async function selectUnit(id) {
   applyDepth();
   updatePadState();
   $('pad').classList.toggle('ruler', !!noteRuler());
+  layout();
   saveUrl();
   if (state.ctx) await loadUnitAudio();
 }
@@ -424,6 +426,8 @@ async function loadUnitAudio() {
 // ---- audio -------------------------------------------------------------------
 
 async function startAudio() {
+  if (state.ctx || state.starting) return;
+  state.starting = true;
   const button = $('start-button');
   button.disabled = true;
   button.textContent = 'Starting…';
@@ -448,13 +452,26 @@ async function startAudio() {
     selectSource(state.startSource || state.unit.source);
     $('start').hidden = true;
     $('record').disabled = false;
-    $('status').textContent = `${ctx.sampleRate / 1000} kHz`;
-    $('status').classList.add('on');
+    updatePower();
+    ctx.addEventListener('statechange', updatePower);
   } catch (err) {
     button.disabled = false;
     button.textContent = 'Start audio';
     toast(`Audio could not start: ${err.message || err}`);
   }
+  state.starting = false;
+}
+
+function updatePower() {
+  const running = state.ctx && state.ctx.state === 'running';
+  $('power').setAttribute('aria-pressed', String(!!running));
+  $('power-label').textContent = !state.ctx ? 'Start' : running ? `${state.ctx.sampleRate / 1000} kHz` : 'Paused';
+}
+
+async function togglePower() {
+  if (!state.ctx) return startAudio();
+  if (state.ctx.state === 'running') await state.ctx.suspend();
+  else await state.ctx.resume();
 }
 
 function onWorkletMessage(msg) {
@@ -507,7 +524,7 @@ async function selectSource(id) {
     note = id === 'file' ? state.file.name : SOURCES.find((s) => s.id === id).hint;
   }
   document.querySelectorAll('#sources .chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.source === id)));
-  $('source-note').textContent = note;
+  if (id === 'live' || id === 'silence' || id === 'file') toast(note);
   saveUrl();
 }
 
@@ -517,25 +534,39 @@ async function loadFile(file) {
   try {
     const buffer = await state.ctx.decodeAudioData(await file.arrayBuffer());
     state.file = { name: file.name, buffer };
-    document.querySelector('[data-source="file"]').textContent = file.name.length > 18 ? `${file.name.slice(0, 16)}…` : file.name;
+    const chip = document.querySelector('[data-source="file"]');
+    chip.textContent = file.name.length > 16 ? `${file.name.slice(0, 14)}…` : file.name;
+    chip.title = file.name;
     selectSource('file');
   } catch (_) {
     toast(`Could not decode ${file.name}.`);
   }
 }
 
+// Fade the end of the input row while more chips are hidden past it.
+function fadeSources() {
+  const box = $('sources');
+  box.classList.toggle('more', box.scrollLeft + box.clientWidth < box.scrollWidth - 2);
+}
+
 function buildSources() {
   const box = $('sources');
-  const entries = [...SOURCES.map((s) => [s.id, s.label]), ['silence', 'Silence'], ['file', 'Your file…'], ['live', 'Live input']];
-  const note = $('source-note');
-  for (const [id, label] of entries) {
+  box.addEventListener('scroll', fadeSources, { passive: true });
+  const entries = [
+    ...SOURCES.map((s) => [s.id, s.label, s.hint]),
+    ['silence', 'Silence', 'no input'],
+    ['file', 'File…', 'your own audio file; you can also drop one on the page'],
+    ['live', 'Live', 'microphone or line input'],
+  ];
+  for (const [id, label, hint] of entries) {
     const chip = document.createElement('button');
     chip.className = 'chip';
     chip.setAttribute('role', 'radio');
     chip.dataset.source = id;
     chip.textContent = label;
+    chip.title = hint;
     chip.addEventListener('click', () => (id === 'file' ? $('file').click() : selectSource(id)));
-    box.insertBefore(chip, note);
+    box.appendChild(chip);
   }
   $('file').addEventListener('change', (e) => loadFile(e.target.files[0]));
   addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drop'); });
@@ -901,6 +932,47 @@ function draw(now) {
   requestAnimationFrame(draw);
 }
 
+// ---- layout ------------------------------------------------------------------
+
+// The pad is the largest square that fits: beside the controls in landscape,
+// above them (which then scroll on their own) in portrait.
+function layout() {
+  const shell = $('shell');
+  const stacked = innerWidth < 720 || innerWidth / innerHeight < 1.1;
+  shell.classList.toggle('stacked', stacked);
+  const stage = $('stage');
+  const rect = stage.getBoundingClientRect();
+  const cs = getComputedStyle(stage);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const gap = parseFloat(cs.columnGap) || 14;
+  const tools = document.querySelector('.pad-tools').offsetHeight + 10;
+  const size = stacked
+    ? Math.min(rect.width - padX, (rect.height - padY) * 0.52)
+    : Math.min(rect.height - padY - tools, (rect.width - padX - gap) * 0.6);
+  shell.style.setProperty('--pad', `${Math.max(180, Math.floor(size))}px`);
+  fitKnobs(stacked);
+  fadeSources();
+}
+
+// In landscape, grow the knobs until the controls fill the side panel.
+function fitKnobs(stacked) {
+  const shell = $('shell');
+  shell.style.removeProperty('--knob');
+  if (stacked) return;
+  const side = document.querySelector('.side');
+  const knobs = [...$('controls').querySelectorAll('.knob')];
+  if (!knobs.length) return;
+  const cs = getComputedStyle(side);
+  const room = side.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const used = [...side.children].reduce((h, e) => h + e.offsetHeight, 0) + parseFloat(cs.rowGap) * (side.children.length - 1);
+  const rows = new Set(knobs.map((k) => k.closest('.ctl').offsetTop)).size;
+  const base = knobs[0].getBoundingClientRect().width;
+  const cell = knobs[0].closest('.ctl').clientWidth - 24;
+  const grown = Math.min(base + Math.max(0, room - used) / rows, cell, 104);
+  if (grown > base + 2) shell.style.setProperty('--knob', `${Math.floor(grown)}px`);
+}
+
 // ---- boot --------------------------------------------------------------------
 
 addEventListener('keydown', (e) => {
@@ -911,6 +983,11 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'b' || e.key === 'B') { if (state.ctx) toggleBypass(); }
 });
 $('start-button').addEventListener('click', startAudio);
+$('power').addEventListener('click', togglePower);
+$('about-button').addEventListener('click', () => $('about').showModal());
+addEventListener('resize', layout);
+new ResizeObserver(layout).observe($('shell'));
+layout();
 $('volume').addEventListener('input', applyVolume);
 $('record').addEventListener('click', toggleRecord);
 $('record').disabled = true;

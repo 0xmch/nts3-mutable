@@ -18,7 +18,7 @@ const profile = mkdtempSync(join(tmpdir(), 'nts3-webtest-'));
 const proc = spawn(chrome, [
   '--headless=new', '--mute-audio', '--no-first-run', '--no-default-browser-check',
   `--user-data-dir=${profile}`, `--remote-debugging-port=${port}`,
-  '--autoplay-policy=no-user-gesture-required', '--window-size=1360,1100', 'about:blank',
+  '--autoplay-policy=no-user-gesture-required', '--window-size=1440,820', 'about:blank',
 ], { stdio: 'ignore' });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -66,11 +66,21 @@ async function key(k) {
 }
 
 async function screenshot(name) {
-  const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  const { data } = await send('Page.captureScreenshot', { format: 'png' });
   const path = join(outdir, `${name}.png`);
   writeFileSync(path, Buffer.from(data, 'base64'));
   return path;
 }
+
+// Page scroll check: an app page should fit its viewport.
+const scroll = () => evaluate(`({
+  page: document.documentElement.scrollHeight - innerHeight,
+  wide: document.documentElement.scrollWidth - innerWidth,
+  overflow: [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed' && !e.closest('dialog, .sources'))
+    .slice(0, 4).map((e) => (e.id || e.className || e.tagName) + ':' + Math.round(e.getBoundingClientRect().right)),
+  side: (() => { const e = document.querySelector('.side'); return e.scrollHeight - e.clientHeight; })(),
+  pad: getComputedStyle(document.getElementById('shell')).getPropertyValue('--pad'),
+})`);
 
 // Peak meter widths (percent of the -54..0 dB scale) over a short window.
 const meters = () => evaluate(`(async () => {
@@ -103,10 +113,11 @@ async function main() {
   await send('Runtime.enable');
   await send('Log.enable');
   await send('Page.enable');
-  await send('Emulation.setDeviceMetricsOverride', { width: 1360, height: 1100, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 820, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: `${url}?unit=resonator` });
   await sleep(1500);
   const shots = [await screenshot('web-idle')];
+  const desktopScroll = await scroll();
 
   await evaluate(`document.getElementById('start-button').click()`);
   await sleep(2500);
@@ -146,12 +157,15 @@ async function main() {
   const pluck = await meters();
   results.resonator_pluck = { silence: quiet, after_tap: pluck };
 
-  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 1400, deviceScaleFactor: 2, mobile: true });
-  await sleep(800);
+  // Reload after switching to a phone viewport, as a phone would load it.
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await send('Page.reload');
+  await sleep(1500);
+  results.scroll = { desktop: desktopScroll, phone: await scroll() };
   shots.push(await screenshot('web-phone'));
 
   // A shared link restores the sound: unit, parameters and input.
-  await send('Emulation.setDeviceMetricsOverride', { width: 1360, height: 1100, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 820, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: `${url}?unit=resonator&p=60.800.1000.700.700.300.1.2&src=noise` });
   await sleep(1500);
   results.link = await evaluate(`(() => {
@@ -164,10 +178,15 @@ async function main() {
   results.link.after_knob = await evaluate(`new URL(location.href).search`);
 
   // Blog embed: an 800 px column, before audio starts.
-  await send('Emulation.setDeviceMetricsOverride', { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setDeviceMetricsOverride', { width: 800, height: 560, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: `${url}?unit=texture&embed=1` });
   await sleep(1500);
+  results.scroll.embed = await scroll();
   shots.push(await screenshot('web-embed'));
+  await send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await sleep(600);
+  results.scroll.wide = await scroll();
+  shots.push(await screenshot('web-wide'));
 
   console.log(JSON.stringify(results, null, 1));
   console.log(logs.length ? logs.join('\n') : 'no console errors or messages');
