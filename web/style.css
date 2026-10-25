@@ -78,6 +78,7 @@ button { font: inherit; color: inherit; }
 }
 .unit-tab .t { font: 600 13.5px var(--sans); color: var(--muted); }
 .unit-tab .s { font: 10.5px var(--mono); color: var(--faint); }
+.unit-tab .short { display: none; }
 .unit-tab:hover .t { color: var(--fg); }
 .unit-tab[aria-selected="true"] {
   background: linear-gradient(var(--panel-solid), var(--panel-solid)) padding-box, var(--grad) border-box;
@@ -235,7 +236,9 @@ body.embed .fullpage { display: inline; }
 @media (max-width: 1100px) {
   :root { --knob: 52px; }
   .unit-tab { padding-inline: 11px; }
-  .unit-tab .s { display: none; }
+  /* Narrow: the module name alone (Rings, Clouds) under each unit. */
+  .unit-tab .long { display: none; }
+  .unit-tab .short { display: inline; }
   /* No room for X / Y / DEPTH badges: the mapped names take the pad colors. */
   .ctl .badge { display: none; }
   .ctl.map-x .name { color: var(--cyan); }

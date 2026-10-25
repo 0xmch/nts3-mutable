@@ -242,9 +242,10 @@ function buildTabs() {
     b.className = 'unit-tab';
     b.setAttribute('role', 'tab');
     b.dataset.unit = u.id;
-    b.innerHTML = '<span class="t"></span><span class="s"></span>';
+    b.innerHTML = '<span class="t"></span><span class="s"><span class="long"></span><span class="short"></span></span>';
     b.querySelector('.t').textContent = u.short;
-    b.querySelector('.s').textContent = u.module;
+    b.querySelector('.long').textContent = u.module;
+    b.querySelector('.short').textContent = u.module.split(' · ')[0];
     b.title = `${u.title} (${i + 1})`;
     b.addEventListener('click', () => selectUnit(u.id));
     nav.appendChild(b);
