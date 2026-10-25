@@ -6,7 +6,12 @@
 #   scripts/build.sh resonator  # one unit
 set -euo pipefail
 
-if [ $# -gt 0 ]; then UNITS=("$@"); else UNITS=($(ls "$(dirname "$0")/../units")); fi
+if [ $# -gt 0 ]; then
+  UNITS=("$@")
+else
+  UNITS=()
+  for c in "$(dirname "$0")"/../units/*/config.mk; do UNITS+=("$(basename "$(dirname "$c")")"); done
+fi
 source "$(dirname "$0")/sync.sh"
 
 mkdir -p "$ROOT/dist"

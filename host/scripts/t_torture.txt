@@ -1,0 +1,499 @@
+0.0 param 2 1000
+0.000 param 5 0
+0.038 param 1 374
+0.038 touch began
+0.073 param 6 0
+0.073 touch began
+0.115 param 1 0
+0.357 param 0 590
+0.748 param 0 0
+0.748 touch began
+0.812 param 4 573
+0.812 touch began
+1.045 touch ended
+1.058 touch ended
+1.075 param 5 99
+1.179 touch ended
+1.310 param 3 7
+1.625 param 7 1000
+1.739 param 2 -1000
+1.739 touch began
+1.947 param 5 1000
+1.947 touch began
+1.980 touch ended
+2.012 param 6 1000
+2.012 touch began
+2.047 param 1 782
+2.347 touch ended
+2.400 param 5 348
+2.609 param 7 0
+2.809 param 1 62
+2.995 touch ended
+3.075 param 7 291
+3.349 param 0 1000
+3.601 param 7 0
+3.670 param 3 24
+3.879 param 2 1000
+3.908 touch ended
+4.234 param 6 884
+4.234 touch began
+4.391 param 6 0
+4.391 touch began
+4.499 param 3 24
+4.588 param 4 0
+4.749 param 5 0
+4.751 touch ended
+4.964 param 0 467
+5.071 touch ended
+5.134 param 6 0
+5.306 param 3 -24
+5.367 param 0 0
+5.591 param 5 0
+5.591 touch began
+5.754 param 4 1000
+5.955 param 1 1000
+6.015 touch ended
+6.152 param 7 0
+6.152 touch began
+6.453 param 7 848
+6.453 touch began
+6.509 touch ended
+6.834 param 5 150
+6.865 param 4 0
+6.984 param 5 0
+7.088 param 5 0
+7.408 param 3 24
+7.514 param 7 364
+7.514 touch began
+7.580 touch ended
+7.640 param 4 198
+7.653 touch ended
+7.791 param 5 1000
+7.791 touch began
+7.990 param 5 1000
+8.005 touch ended
+8.352 param 0 490
+8.616 param 1 1000
+8.921 param 7 0
+9.183 param 1 820
+9.356 param 1 0
+9.356 touch began
+9.433 param 7 825
+9.433 touch began
+9.618 touch ended
+9.826 param 5 159
+9.854 param 1 539
+10.039 param 3 -24
+10.039 touch began
+10.150 param 5 265
+10.220 param 5 1000
+10.549 param 6 846
+10.549 touch began
+10.632 touch ended
+10.763 param 7 0
+10.862 touch ended
+11.078 param 2 -1000
+11.088 touch ended
+11.374 param 0 333
+11.605 param 1 904
+11.605 touch began
+11.641 param 1 1000
+11.950 param 1 1000
+11.996 touch ended
+12.162 param 3 24
+12.385 param 7 0
+12.738 param 4 944
+12.835 param 7 1000
+12.835 touch began
+12.882 param 3 -24
+12.882 touch began
+12.949 param 2 924
+13.108 param 4 0
+13.211 param 1 1000
+13.211 touch began
+13.316 param 6 1000
+13.411 param 5 94
+13.495 touch ended
+13.559 param 7 451
+13.559 touch began
+13.724 touch ended
+13.816 param 1 0
+13.876 param 4 0
+13.965 param 2 1000
+14.229 touch ended
+14.242 param 4 0
+14.458 param 7 1000
+14.458 touch began
+14.550 touch ended
+14.582 touch ended
+14.739 param 6 0
+14.739 touch began
+14.783 touch ended
+14.793 param 4 85
+14.838 param 1 0
+15.068 param 4 0
+15.068 touch began
+15.445 param 2 -1000
+15.445 touch began
+15.704 param 3 24
+15.791 param 5 0
+15.825 param 0 750
+15.917 param 7 1000
+15.917 touch began
+16.101 param 7 1000
+16.238 param 3 24
+16.238 touch began
+16.490 touch ended
+16.535 param 2 1000
+16.873 param 0 72
+16.991 param 2 -1000
+17.155 param 4 0
+17.192 param 2 1000
+17.310 touch ended
+17.312 param 5 995
+17.346 param 4 1000
+17.346 touch began
+17.397 param 4 514
+17.397 touch began
+17.419 param 4 0
+17.419 touch began
+17.557 touch ended
+17.589 param 4 311
+17.589 touch began
+17.810 param 2 346
+18.003 touch ended
+18.023 touch ended
+18.057 param 5 1000
+18.057 touch began
+18.321 param 0 844
+18.412 touch ended
+18.580 param 2 863
+18.597 touch ended
+18.764 touch ended
+18.816 param 0 846
+19.175 param 3 -24
+19.175 touch began
+19.508 touch ended
+19.560 param 6 1000
+19.818 param 3 24
+19.818 touch began
+20.122 param 1 675
+20.122 touch began
+20.238 param 1 1000
+20.238 touch began
+20.346 param 7 1000
+20.346 touch began
+20.453 touch ended
+20.475 param 0 631
+20.525 param 2 1000
+20.808 param 2 1000
+20.808 touch began
+21.083 param 3 24
+21.083 touch began
+21.280 param 7 0
+21.353 touch ended
+21.416 touch ended
+21.508 param 4 1000
+21.508 touch began
+21.599 touch ended
+21.754 touch ended
+21.840 param 7 1000
+21.840 touch began
+21.940 param 1 145
+22.121 touch ended
+22.168 touch ended
+22.322 param 2 235
+22.432 touch ended
+22.679 param 5 1000
+22.884 param 0 0
+23.163 param 6 309
+23.163 touch began
+23.303 param 5 1000
+23.642 param 1 0
+23.732 touch ended
+23.857 touch ended
+24.004 param 4 1000
+24.004 touch began
+24.355 param 1 1000
+24.700 param 4 0
+24.791 touch ended
+24.828 param 2 1000
+24.968 param 5 1000
+25.297 param 6 935
+25.590 param 0 955
+25.844 param 2 1000
+26.210 param 2 1000
+26.337 param 4 756
+26.456 param 3 24
+26.626 param 2 -1000
+26.626 touch began
+26.955 param 3 24
+27.146 param 2 -1000
+27.146 touch began
+27.377 param 5 1000
+27.377 touch began
+27.503 touch ended
+27.632 touch ended
+27.734 param 6 1000
+27.834 param 4 0
+28.072 param 5 128
+28.331 param 3 24
+28.497 param 7 1000
+28.520 touch ended
+28.849 param 0 0
+29.159 param 7 991
+29.207 param 7 1000
+29.207 touch began
+29.286 param 1 964
+29.434 touch ended
+29.627 param 7 87
+29.648 param 2 -524
+29.913 param 4 0
+30.134 param 6 0
+30.134 touch began
+30.512 param 3 24
+30.512 touch began
+30.536 param 4 1000
+30.742 touch ended
+30.801 param 3 6
+30.801 touch began
+31.186 param 4 0
+31.186 touch began
+31.303 touch ended
+31.452 param 1 0
+31.719 touch ended
+31.824 param 3 -24
+32.117 param 5 1000
+32.117 touch began
+32.418 param 1 1000
+32.556 param 3 24
+32.556 touch began
+32.688 param 7 0
+32.893 param 0 971
+32.893 touch began
+32.957 touch ended
+32.994 param 2 -1000
+33.083 param 7 919
+33.382 param 1 0
+33.472 param 7 1000
+33.636 param 5 1000
+33.636 touch began
+33.652 touch ended
+33.686 touch ended
+33.713 touch ended
+33.763 param 5 0
+34.071 param 6 1000
+34.080 touch ended
+34.255 param 0 1000
+34.255 touch began
+34.445 param 5 372
+34.476 param 6 253
+34.512 param 0 0
+34.555 param 3 -24
+34.704 param 4 343
+34.704 touch began
+34.986 param 4 0
+35.233 param 1 0
+35.233 touch began
+35.343 touch ended
+35.430 param 6 1000
+35.759 param 2 1000
+35.759 touch began
+36.060 param 2 -1000
+36.200 touch ended
+36.201 param 5 802
+36.201 touch began
+36.507 param 3 -24
+36.604 touch ended
+36.667 touch ended
+36.710 param 5 1000
+37.106 param 4 0
+37.106 touch began
+37.366 touch ended
+37.501 param 7 0
+37.501 touch began
+37.860 param 3 23
+37.954 touch ended
+38.133 param 1 1000
+38.133 touch began
+38.294 param 4 1000
+38.294 touch began
+38.373 param 3 -24
+38.429 touch ended
+38.770 param 3 -24
+38.793 touch ended
+39.166 param 1 1000
+39.271 touch ended
+39.274 param 7 1000
+39.274 touch began
+39.339 param 3 14
+39.339 touch began
+39.499 touch ended
+39.554 param 2 -81
+39.554 touch began
+39.868 touch ended
+39.934 param 1 652
+40.086 param 0 1000
+40.086 touch began
+40.203 param 3 24
+40.365 param 4 0
+40.365 touch began
+40.502 touch ended
+40.568 param 6 1000
+40.647 param 1 0
+40.770 param 4 1000
+40.810 param 5 1000
+40.810 touch began
+41.112 touch ended
+41.134 param 3 1
+41.361 touch ended
+41.512 param 6 0
+41.844 param 6 1000
+41.926 param 0 52
+41.926 touch began
+42.097 param 5 754
+42.097 touch began
+42.178 param 2 -1000
+42.178 touch began
+42.345 touch ended
+42.504 param 3 -24
+42.541 param 7 0
+42.799 touch ended
+42.802 param 1 925
+43.136 param 2 -1000
+43.164 touch ended
+43.389 param 3 -24
+43.425 param 2 1000
+43.425 touch began
+43.541 touch ended
+43.721 param 3 -22
+43.927 touch ended
+43.996 param 5 1000
+44.225 param 4 1000
+44.340 param 6 1000
+44.526 param 0 3
+44.723 param 7 781
+44.917 param 2 1000
+44.963 param 5 1000
+44.963 touch began
+45.177 param 0 41
+45.177 touch began
+45.316 param 1 55
+45.584 param 2 -1000
+45.852 touch ended
+45.882 param 1 0
+46.089 param 2 405
+46.134 param 5 1000
+46.134 touch began
+46.258 param 7 1000
+46.628 param 3 24
+46.738 param 5 0
+46.738 touch began
+47.022 touch ended
+47.069 touch ended
+47.114 param 5 1000
+47.114 touch began
+47.178 param 0 1000
+47.370 param 1 258
+47.540 param 5 1000
+47.779 param 5 0
+47.866 param 0 303
+47.866 touch began
+47.928 touch ended
+48.260 param 5 0
+48.364 param 4 630
+48.579 param 0 1000
+48.579 touch began
+48.608 param 0 1000
+48.686 touch ended
+48.827 param 3 2
+48.897 param 5 1000
+48.897 touch began
+48.935 touch ended
+49.148 touch ended
+49.222 param 2 -1000
+49.222 touch began
+49.495 param 4 1000
+49.520 touch ended
+49.536 param 5 608
+49.785 param 7 0
+49.822 param 0 0
+49.822 touch began
+49.889 touch ended
+49.948 touch ended
+50.138 param 0 627
+50.232 param 6 204
+50.445 param 6 832
+50.445 touch began
+50.579 param 0 910
+50.871 param 0 1000
+51.068 param 7 0
+51.071 touch ended
+51.187 param 0 1000
+51.559 param 4 0
+51.559 touch began
+51.744 param 4 302
+52.104 param 1 901
+52.104 touch began
+52.214 param 3 -14
+52.307 param 6 336
+52.307 touch began
+52.567 param 7 483
+52.632 touch ended
+52.671 touch ended
+52.912 param 6 978
+52.912 touch began
+53.232 param 6 637
+53.232 touch began
+53.307 param 0 0
+53.389 param 2 -1000
+53.389 touch began
+53.653 param 0 0
+53.674 touch ended
+53.698 param 5 204
+53.743 param 6 0
+53.743 touch began
+53.776 param 1 844
+53.976 touch ended
+53.978 param 2 -800
+53.978 touch began
+54.123 touch ended
+54.159 param 0 1000
+54.197 param 5 1000
+54.446 param 7 1000
+54.478 param 6 1000
+54.535 param 7 0
+54.623 touch ended
+54.637 param 1 1000
+54.637 touch began
+54.650 touch ended
+54.683 touch ended
+54.734 param 0 1000
+54.941 param 2 1000
+55.055 touch ended
+55.325 param 4 0
+55.325 touch began
+55.610 param 7 0
+55.762 touch ended
+55.922 param 7 806
+55.982 param 5 0
+56.152 param 1 432
+56.152 touch began
+56.272 param 2 -224
+56.272 touch began
+56.494 param 0 356
+56.572 touch ended
+56.573 param 7 677
+56.657 param 7 1000
+56.725 param 7 658
+56.725 touch began
+56.859 param 2 -1000
+57.116 touch ended
+57.154 param 5 0
+57.199 touch ended
+57.246 param 1 168
+57.246 touch began
+57.640 param 4 1000
+57.735 param 1 0
+57.931 param 0 1000
+58.021 touch ended

@@ -1,7 +1,7 @@
 # nts3-mutable: the logue SDK NTS-3 dummy-genericfx Makefile (BSD 3-Clause,
 # KORG), with SDK paths taken from $(LOGUE_SDK) so units can live outside
-# the SDK tree, UCXXDEFS for C++-only flags and UWASMDEFS for the websim
-# build. `make wasm` no longer launches emrun (scripts/sim.sh serves the page)
+# the SDK tree, UCXXDEFS for C++-only flags, and UWASMDEFS and WASMMAIN for
+# the websim build. `make wasm` no longer launches emrun (scripts/sim.sh serves the page)
 # and starts the page volume at 0.05 instead of 0.5.
 
 LOGUE_SDK ?= $(HOME)/src/logue-sdk
@@ -146,7 +146,8 @@ LIBDIR := $(patsubst %,-I%,$(DLIBDIR) $(ULIBDIR))
 # WebAssembly compiler and binding tools
 #
 SANDBOXDIR ?= $(LOGUE_SDK)/websim
-WASMSRC := wasm.cc $(UCSRC) $(UCXXSRC) $(wildcard $(SANDBOXDIR)/dsp/*.c) $(wildcard $(SANDBOXDIR)/dsp/*.cpp)
+WASMMAIN ?= wasm.cc
+WASMSRC := $(WASMMAIN) $(UCSRC) $(UCXXSRC) $(wildcard $(SANDBOXDIR)/dsp/*.c) $(wildcard $(SANDBOXDIR)/dsp/*.cpp)
 WASMDIR := $(PROJECT_ROOT)/sim
 DINCDIR += $(TOOLSDIR)/emsdk/upstream/emscripten/system/include
 EMCC_BIN_PATH := $(TOOLSDIR)/emsdk/upstream/emscripten

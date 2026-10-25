@@ -1,0 +1,13 @@
+# Fully wet. Live processing, then touch = freeze and scrub X, release.
+0.0 param 2 1000
+0.0 param 0 200
+2.0 touch began
+2.0 param 0 0
+2.5 param 0 250
+3.0 param 0 500
+3.5 param 0 750
+4.0 param 0 1000
+4.5 param 1 900
+5.0 touch ended
+6.0 param 3 12
+7.0 param 3 -12

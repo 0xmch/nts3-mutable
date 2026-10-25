@@ -11,8 +11,9 @@ include $(PROJECT_ROOT)/config.mk
 SRCS := $(addprefix $(PROJECT_ROOT)/,$(filter-out /%,$(UCSRC) $(UCXXSRC))) \
         $(filter /%,$(UCSRC) $(UCXXSRC))
 INC := -include stubs/host_attributes.h -I$(PROJECT_ROOT) -Istubs -I$(COMMON) $(addprefix -I,$(UINCDIR))
-# TEST selects stmlib's portable code paths (no ARM inline assembly).
-FLAGS := -O2 -g -DTEST -DM_PI=3.14159265358979323846 -Wall -Wno-unused-parameter \
+# UWASMDEFS are the unit's portable defines (TEST selects stmlib's code paths
+# without ARM inline assembly), shared with the browser simulator build.
+FLAGS := -O2 -g $(UWASMDEFS) -Wall -Wno-unused-parameter \
          -Wno-unused-private-field -Wno-unknown-attributes -Wno-unused-local-typedef $(INC)
 OUT := build/$(UNIT)
 # xcrun can hand out a Command Line Tools SDK newer than Xcode's linker
@@ -20,7 +21,9 @@ OUT := build/$(UNIT)
 SYSROOT ?= $(shell xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 FLAGS += -isysroot $(SYSROOT)
 
-$(OUT)/harness: harness.cc $(SRCS) $(wildcard $(PROJECT_ROOT)/*.h) Makefile
+HEADERS := $(shell find ../units ../third_party -name '*.h')
+
+$(OUT)/harness: harness.cc $(SRCS) $(HEADERS) Makefile
 	@mkdir -p $(OUT)
 	@for f in $(filter %.c,$(SRCS)); do \
 	  clang -std=c11 $(FLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done
