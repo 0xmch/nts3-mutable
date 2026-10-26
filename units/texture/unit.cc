@@ -42,6 +42,8 @@
 #include "utils/int_math.h" // clipminmaxi32()
 #include <algorithm>        // std::fill
 
+#include "../common/meter.h"
+
 // config.mk builds with -fvisibility=hidden to keep the ELF dynamic symbol
 // table small, so the unit API is exported explicitly.
 #undef __unit_callback
@@ -96,6 +98,9 @@ __unit_callback int8_t unit_init(const unit_runtime_desc_t *desc)
     // clear buffer
     std::fill(allocated_buffer_, allocated_buffer_ + s_effect_instance.getBufferSize(), 0.f);
     s_effect_instance.init(allocated_buffer_);
+    const unit_runtime_genericfx_context_t* context =
+        static_cast<const unit_runtime_genericfx_context_t*>(desc->hooks.runtime_context);
+    s_effect_instance.setRawInput(context ? context->get_raw_input : nullptr);
   }
   else
   {
@@ -107,6 +112,10 @@ __unit_callback int8_t unit_init(const unit_runtime_desc_t *desc)
   {
     cached_values[id] = static_cast<int32_t>(unit_header.common.params[id].init);
   }
+
+#ifdef NTS3_METER
+  meter::Init(s_effect_instance);
+#endif
 
   return k_unit_err_none;
 }
@@ -133,28 +142,46 @@ __unit_callback void unit_suspend()
 
 __unit_callback void unit_render(const float *in, float *out, uint32_t frames)
 {
+#ifdef NTS3_METER
+  meter::Render(s_effect_instance, in, out, frames);
+#else
   s_effect_instance.process(in, out, frames);
+#endif
 }
 
 __unit_callback void unit_set_param_value(uint8_t id, int32_t value)
 {
+  if (id >= unit_header.common.num_params)
+    return;
+
   // clip to valid range as defined in header
   value = clipminmaxi32(unit_header.common.params[id].min, value, unit_header.common.params[id].max);
 
   // cache value for unit_get_param_value(id)
   cached_values[id] = value;
 
+#ifdef NTS3_METER
+  if (meter::Forced(id))
+    return;
+#endif
+
   s_effect_instance.setParameter(id, value);
 }
 
 __unit_callback int32_t unit_get_param_value(uint8_t id)
 {
+  if (id >= unit_header.common.num_params)
+    return 0;
+
   // just return the cached value
   return cached_values[id];
 }
 
 __unit_callback const char *unit_get_param_str_value(uint8_t id, int32_t value)
 {
+  if (id >= unit_header.common.num_params)
+    return nullptr;
+
   value = clipminmaxi32(unit_header.common.params[id].min, value, unit_header.common.params[id].max); // just in case
   return s_effect_instance.getParameterStrValue(id, value);
 }

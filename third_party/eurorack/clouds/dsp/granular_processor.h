@@ -31,6 +31,7 @@
 
 #include "stmlib/stmlib.h"
 #include "stmlib/dsp/filter.h"
+#include "stmlib/utils/buffer_allocator.h"
 
 #include "clouds/dsp/correlator.h"
 #include "clouds/dsp/frame.h"
@@ -47,6 +48,19 @@
 namespace clouds {
 
 const int32_t kDownsamplingFactor = 2;
+
+// nts3-mutable: the converters' types, named for the size below, and what
+// GranularProcessor::Init() takes from its allocator.
+typedef SampleRateConverter<-kDownsamplingFactor, 45, src_filter_1x_2_45>
+    DownConverter;
+typedef SampleRateConverter<+kDownsamplingFactor, 45, src_filter_1x_2_45>
+    UpConverter;
+const size_t kTailBufferSize = 256;
+const size_t kGranularProcessorBufferBytes =
+    sizeof(FloatFrame) * (3 * kMaxBlockSize +
+                          2 * kMaxBlockSize / kDownsamplingFactor) +
+    sizeof(int16_t) * 2 * kTailBufferSize +
+    DownConverter::kBufferBytes + UpConverter::kBufferBytes;
 
 enum PlaybackMode {
   PLAYBACK_MODE_GRANULAR,
@@ -75,11 +89,16 @@ class GranularProcessor {
   GranularProcessor() { }
   ~GranularProcessor() { }
   
+  // nts3-mutable: allocator hands out the block buffers, the tail buffer and
+  // the converters' arrays (kGranularProcessorBufferBytes, plain samples; on
+  // the NTS-3, the unit's SDRAM), so that the object itself, which holds the
+  // grains and the other state, can live in the unit's own RAM.
   void Init(
       void* large_buffer,
       size_t large_buffer_size,
       void* small_buffer,
-      size_t small_buffer_size);
+      size_t small_buffer_size,
+      stmlib::BufferAllocator* allocator);
 
   void Process(ShortFrame* input, ShortFrame* output, size_t size);
   void Prepare();
@@ -192,18 +211,18 @@ class GranularProcessor {
   AudioBuffer<RESOLUTION_8_BIT_MU_LAW> buffer_8_[2];
   AudioBuffer<RESOLUTION_16_BIT> buffer_16_[2];
   
-  FloatFrame in_[kMaxBlockSize];
-  FloatFrame in_downsampled_[kMaxBlockSize / kDownsamplingFactor];
-  FloatFrame out_downsampled_[kMaxBlockSize / kDownsamplingFactor];
-  FloatFrame out_[kMaxBlockSize];
-  FloatFrame fb_[kMaxBlockSize];
+  FloatFrame* in_;
+  FloatFrame* in_downsampled_;
+  FloatFrame* out_downsampled_;
+  FloatFrame* out_;
+  FloatFrame* fb_;
   
-  int16_t tail_buffer_[2][256];
+  int16_t* tail_buffer_[2];  // kTailBufferSize each
   
   Parameters parameters_;
   
-  SampleRateConverter<-kDownsamplingFactor, 45, src_filter_1x_2_45> src_down_;
-  SampleRateConverter<+kDownsamplingFactor, 45, src_filter_1x_2_45> src_up_;
+  DownConverter src_down_;
+  UpConverter src_up_;
   
   PersistentState persistent_state_;
   

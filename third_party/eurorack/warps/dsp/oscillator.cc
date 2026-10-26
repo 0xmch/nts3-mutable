@@ -27,6 +27,7 @@
 // Oscillator.
 
 #include "warps/dsp/oscillator.h"
+#include "warps/dsp/rate.h"
 
 #include "stmlib/dsp/parameter_interpolator.h"
 #include "stmlib/utils/random.h"
@@ -151,10 +152,10 @@ float Oscillator::RenderPolyblep(
         this_sample = this_sample * 2.0f - 1.0f;
         // Slight roll-off of high frequencies - prevent high components near
         // 48kHz that are not eliminated by the upsampling filter.
-        lp_state += 0.3f * (this_sample - lp_state);
+        lp_state += WARPS_ONE_POLE(0.3f) * (this_sample - lp_state);
         *out++ = lp_state;
       } else {
-        lp_state += 0.25f * ((hp_state - this_sample) - lp_state);
+        lp_state += WARPS_ONE_POLE(0.25f) * ((hp_state - this_sample) - lp_state);
         *out++ = 4.0f * lp_state;
         hp_state = this_sample;
       }
@@ -179,7 +180,7 @@ float Oscillator::Duck(
   float level = external_input_level_;
   for (size_t i = 0; i < size; ++i) {
     float error = external[i] * external[i] - level;
-    level += ((error > 0.0f) ? 0.01f : 0.0001f) * error;
+    level += ((error > 0.0f) ? WARPS_ONE_POLE(0.01f) : WARPS_ONE_POLE(0.0001f)) * error;
     float internal_gain = 1.0f - 32.0f * level;
     if (internal_gain <= 0.0f) {
       internal_gain = 0.0f;

@@ -46,6 +46,12 @@ class Resonator {
   Resonator() { }
   ~Resonator() { }
   
+  // nts3-mutable: the mode filters (kMaxModes of them, floats only), set
+  // once before Init().
+  void set_filters(stmlib::Svf* filters) {
+    f_ = filters;
+  }
+
   void Init();
   void Process(
       const float* in,
@@ -89,7 +95,7 @@ class Resonator {
   
   int32_t resolution_;
   
-  stmlib::Svf f_[kMaxModes];
+  stmlib::Svf* f_;
   
   DISALLOW_COPY_AND_ASSIGN(Resonator);
 };

@@ -34,6 +34,7 @@
 #include "stmlib/stmlib.h"
 #include "stmlib/dsp/cosine_oscillator.h"
 #include "stmlib/dsp/delay_line.h"
+#include "stmlib/utils/buffer_allocator.h"
 
 #include "rings/dsp/dsp.h"
 #include "rings/dsp/fm_voice.h"
@@ -63,12 +64,22 @@ enum ResonatorModel {
 const int32_t kMaxPolyphony = 4;
 const int32_t kNumStrings = kMaxPolyphony * 2;
 
+// nts3-mutable: the bytes a Part takes from its allocator (Init): the strings'
+// and the pluckers' delay lines, the mode filters, the note filter's delay
+// and the block buffers, all plain floats.
+const size_t kPartBufferBytes = sizeof(float) * (
+    kNumStrings * (kDelayLineSize + kDelayLineSize / 2) +
+    kMaxPolyphony * Plucker::kCombFilterSize +
+    NoteFilter::kDelaySize +
+    5 * kMaxBlockSize) +
+    sizeof(stmlib::Svf) * kMaxPolyphony * kMaxModes;
+
 class Part {
  public:
   Part() { }
   ~Part() { }
   
-  void Init(uint16_t* reverb_buffer);
+  void Init(uint16_t* reverb_buffer, stmlib::BufferAllocator* allocator);
   
   void Process(
       const PerformanceState& performance_state,
@@ -172,12 +183,13 @@ class Part {
   float note_[kMaxPolyphony];
   NoteFilter note_filter_;
   
-  float resonator_input_[kMaxBlockSize];
-  float sympathetic_resonator_input_[kMaxBlockSize];
-  float noise_burst_buffer_[kMaxBlockSize];
+  // nts3-mutable: from the allocator (Init), as the delay lines.
+  float* resonator_input_;
+  float* sympathetic_resonator_input_;
+  float* noise_burst_buffer_;
   
-  float out_buffer_[kMaxBlockSize];
-  float aux_buffer_[kMaxBlockSize];
+  float* out_buffer_;
+  float* aux_buffer_;
   
   Reverb reverb_;
   Limiter limiter_;

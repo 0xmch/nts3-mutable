@@ -2,13 +2,21 @@
 // points the firmware calls, and writes the result as a WAV file.
 //
 //   harness -i in.wav -o out.wav [-s script.txt] [-l seconds] [-f frames]
+//           [-r release seconds]
 //
 // Without -i the input is silence. The script holds one event per line:
 //   <seconds> param <id> <value>
 //   <seconds> touch <began|moved|ended> [x y]
 // It prints peak/RMS per second of output, NaN/Inf counts, and the render time
 // relative to real time.
+//
+// The firmware's raw-input hook (get_raw_input) always returns the block's
+// input. -r routes the unit as the NTS-3 does (Release Mode "thru", measured
+// on the device): it is called all the time and its output is always added,
+// but its input is crossfaded with the dry path, fully to the unit while the
+// pad is touched and back to the dry path over the release time after.
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -44,6 +52,10 @@ uint8_t* SdramAlloc(size_t size) {
   return static_cast<uint8_t*>(std::calloc(1, size));
 }
 void SdramFree(const uint8_t* mem) { std::free(const_cast<uint8_t*>(mem)); }
+
+// get_raw_input: the current block's input, before the pad's routing.
+const float* raw_input = nullptr;
+const float* RawInput() { return raw_input; }
 size_t SdramAvail() { return kSdramPerRuntime - sdram_used; }
 
 // Minimal WAV I/O: 16-bit PCM or 32-bit float, stereo or mono, 48 kHz.
@@ -62,8 +74,9 @@ bool ReadWav(const char* path, std::vector<float>* stereo) {
   uint32_t size;
   while (std::fread(id, 1, 4, f) == 4 && std::fread(&size, 4, 1, f) == 1) {
     if (!std::memcmp(id, "fmt ", 4)) {
-      std::vector<uint8_t> fmt(size);
-      std::fread(fmt.data(), 1, size, f);
+      std::vector<uint8_t> fmt(std::max<uint32_t>(size, 16));
+      if (size < 16 || std::fread(fmt.data(), 1, size, f) != size) break;
+      if (size & 1) std::fseek(f, 1, SEEK_CUR);
       std::memcpy(&format, &fmt[0], 2);
       std::memcpy(&channels, &fmt[2], 2);
       std::memcpy(&rate, &fmt[4], 4);
@@ -82,12 +95,18 @@ bool ReadWav(const char* path, std::vector<float>* stereo) {
         for (int c = 0; c < 2; ++c) {
           float v = 0.0f;
           if (c < channels) {
+            bool read = false;
             if (format == 1) {
               int16_t s;
-              std::fread(&s, 2, 1, f);
+              read = std::fread(&s, 2, 1, f) == 1;
               v = s / 32768.0f;
             } else {
-              std::fread(&v, 4, 1, f);
+              read = std::fread(&v, 4, 1, f) == 1;
+            }
+            if (!read) {  // truncated file: keep what was read
+              stereo->resize(i * 2);
+              std::fclose(f);
+              return i > 0;
             }
           } else {
             v = (*stereo)[i * 2];
@@ -151,18 +170,24 @@ std::vector<Event> ReadScript(const char* path) {
     int a = 0, b = 0, c = 0;
     if (line[0] == '#' || std::sscanf(line, "%lf %15s", &t, kind) != 2) continue;
     Event e = {t, false, 0, 0, 512, 512};
+    int n = 0;
     if (!std::strcmp(kind, "param") &&
-        std::sscanf(line, "%lf %15s %d %d", &t, kind, &a, &b) == 4) {
+        std::sscanf(line, "%lf %15s %d %d", &t, kind, &a, &b) == 4 && a >= 0 &&
+        a < static_cast<int>(unit_header.common.num_params)) {
       e.id_or_phase = a;
       e.value = b;
     } else if (!std::strcmp(kind, "touch") &&
-               std::sscanf(line, "%lf %15s %15s %d %d", &t, kind, arg, &b, &c) >= 3) {
+               (n = std::sscanf(line, "%lf %15s %15s %d %d", &t, kind, arg, &b, &c)) >= 3 &&
+               (!std::strcmp(arg, "began") || !std::strcmp(arg, "moved") ||
+                !std::strcmp(arg, "ended"))) {
       e.touch = true;
       e.id_or_phase = !std::strcmp(arg, "began") ? k_unit_touch_phase_began
                       : !std::strcmp(arg, "moved") ? k_unit_touch_phase_moved
                                                     : k_unit_touch_phase_ended;
-      e.x = b;
-      e.y = c;
+      if (n == 5) {
+        e.x = b;
+        e.y = c;
+      }
     } else {
       std::fprintf(stderr, "bad script line: %s", line);
       std::exit(1);
@@ -181,6 +206,7 @@ int main(int argc, char** argv) {
   const char* script_path = nullptr;
   double length = -1.0;
   uint32_t frames = 64;
+  double release = -1.0;
   for (int i = 1; i + 1 < argc; i += 2) {
     std::string flag = argv[i];
     if (flag == "-i") in_path = argv[i + 1];
@@ -188,6 +214,11 @@ int main(int argc, char** argv) {
     else if (flag == "-s") script_path = argv[i + 1];
     else if (flag == "-l") length = std::atof(argv[i + 1]);
     else if (flag == "-f") frames = std::atoi(argv[i + 1]);
+    else if (flag == "-r") release = std::atof(argv[i + 1]);
+  }
+  if (frames < 1 || frames > 4096) {
+    std::fprintf(stderr, "-f: frames per call must be 1 to 4096\n");
+    return 1;
   }
 
   std::vector<float> input;
@@ -205,6 +236,7 @@ int main(int argc, char** argv) {
   unit_runtime_genericfx_context_t context = {};
   context.touch_area_width = 1024;
   context.touch_area_height = 1024;
+  context.get_raw_input = RawInput;
   unit_runtime_desc_t desc = {};
   desc.target = unit_header.common.target;
   desc.api = UNIT_API_VERSION;
@@ -225,13 +257,24 @@ int main(int argc, char** argv) {
 
   std::vector<float> output(total * 2, 0.0f);
   size_t next_event = 0;
+  const bool nts3_mode = release >= 0.0;
+  const size_t release_frames = nts3_mode ? static_cast<size_t>(release * kSampleRate) : 0;
+  bool touched = false;
+  size_t tail_left = 0;
+  std::vector<float> unit_in(frames * 2, 0.0f);
   double render_seconds = 0.0;
+  double slowest_share = 0.0, slowest_at = 0.0;
   for (size_t pos = 0; pos < total; pos += frames) {
     double now = static_cast<double>(pos) / kSampleRate;
     while (next_event < events.size() && events[next_event].time <= now) {
       const Event& e = events[next_event++];
       if (e.touch) {
         unit_touch_event(0, e.id_or_phase, e.x, e.y);
+        if (e.id_or_phase == k_unit_touch_phase_began) touched = true;
+        if (e.id_or_phase == k_unit_touch_phase_ended) {
+          touched = false;
+          tail_left = release_frames;
+        }
       } else {
         unit_set_param_value(e.id_or_phase, e.value);
         const char* s = unit_get_param_str_value(e.id_or_phase, e.value);
@@ -242,9 +285,32 @@ int main(int argc, char** argv) {
     }
     uint32_t n = static_cast<uint32_t>(std::min<size_t>(frames, total - pos));
     auto t0 = std::chrono::steady_clock::now();
-    unit_render(&input[pos * 2], &output[pos * 2], n);
-    render_seconds +=
+    raw_input = &input[pos * 2];
+    if (!nts3_mode || touched) {
+      unit_render(&input[pos * 2], &output[pos * 2], n);
+    } else {
+      // Routing gain g: from 1 at the release down to 0 over the release time.
+      for (uint32_t i = 0; i < 2 * n; ++i) {
+        float g = tail_left > i / 2 ? static_cast<float>(tail_left - i / 2) / release_frames : 0.0f;
+        unit_in[i] = g * input[pos * 2 + i];
+      }
+      unit_render(unit_in.data(), &output[pos * 2], n);
+      for (uint32_t i = 0; i < 2 * n; ++i) {
+        float g = tail_left > i / 2 ? static_cast<float>(tail_left - i / 2) / release_frames : 0.0f;
+        output[pos * 2 + i] += (1.0f - g) * input[pos * 2 + i];
+      }
+      tail_left = tail_left > n ? tail_left - n : 0;
+    }
+    double seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    render_seconds += seconds;
+    // The slowest call against its own duration: what overloads the device
+    // is a call that overruns, not the average.
+    double share = seconds / (static_cast<double>(n) / kSampleRate);
+    if (share > slowest_share) {
+      slowest_share = share;
+      slowest_at = static_cast<double>(pos) / kSampleRate;
+    }
   }
   unit_teardown();
 
@@ -270,8 +336,9 @@ int main(int argc, char** argv) {
                 20.0 * std::log10(std::max(rms, 1e-9)));
   }
   std::printf("non-finite samples: %zu\n", bad);
-  std::printf("render: %.2f%% of real time on this host\n",
-              100.0 * render_seconds / (static_cast<double>(total) / kSampleRate));
+  std::printf("render: %.2f%% of real time on this host, slowest call %.1f%% at %.2fs\n",
+              100.0 * render_seconds / (static_cast<double>(total) / kSampleRate),
+              100.0 * slowest_share, slowest_at);
   if (!WriteWav(out_path, output)) {
     std::fprintf(stderr, "cannot write %s\n", out_path);
     return 1;

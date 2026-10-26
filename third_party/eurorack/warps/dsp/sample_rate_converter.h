@@ -49,111 +49,12 @@ struct SRC_FIR { };
 
 namespace warps {
 
-template<int32_t N>
-struct FilterState {
- public:
-  enum {
-    n = N
-  };
-  inline void Push(float value) {
-    tail.Push(head);
-    head = value;
-  }
-
-  template<int32_t i> inline float Read() const {
-    return i == 0 ? head : tail.template Read<i - 1>();
-  }
-
-  inline void Load(const float* x_state) {
-    head = x_state[0];
-    tail.Load(x_state + 1);
-  }
-
-  inline void Save(float* x_state) {
-    x_state[0] = head;
-    tail.Save(x_state + 1);
-  }
-
- private:  
-  float head;
-  FilterState<N-1> tail;
-};
-
-template<>
-class FilterState<1> {
- public:
-  enum {
-    n = 1
-  };
-  inline void Push(float value) {
-    head = value;
-  }
-
-  template<int32_t i> inline float Read() const {
-    return head;
-  }
-
-  inline void Load(const float* x_state) {
-    head = x_state[0];
-  }
-
-  inline void Save(float* x_state) {
-    x_state[0] = head;
-  }
- private:
-  float head;
-};
-
-template<int32_t N, int32_t x_stride, int32_t h_stride, int32_t mirror = 0, int32_t i = 0, int32_t h_offset = 0>
-struct Accumulator {
-  enum {
-    h_index = mirror != 0 && h_offset + i * h_stride >= mirror / 2 ?
-        mirror - 1 - i * h_stride - h_offset : h_offset + i * h_stride
-  };
-  
-  template<typename IR>
-  inline float operator()(const float* x, const IR& h) const {
-    Accumulator<N - 1, x_stride, h_stride, mirror, i + 1, h_offset> a;
-    return x[i * x_stride] * h.template Read<h_index>() + a(x, h);
-  }
-  
-  template<int32_t NN, typename IR>
-  inline float operator()(const FilterState<NN>& x, const IR& h) const {
-    Accumulator<N - 1, x_stride, h_stride, mirror, i + 1, h_offset> a;
-    return x.template Read<i * x_stride>() * h.template Read<h_index>() + a(x, h);
-  }
-};
-
-template<int32_t x_stride, int32_t h_stride, int32_t mirror, int32_t i, int32_t h_offset>
-struct Accumulator<0, x_stride, h_stride, mirror, i, h_offset> {
-  template<typename IR>
-  inline float operator()(const float* x, const IR& h) const {
-    return 0.0f;
-  }
-
-  template<int32_t NN, typename IR>
-  inline float operator()(const FilterState<NN>& x, const IR& h) const {
-    return 0.0f;
-  }
-};
-
-template<int32_t K, int32_t mirror = 0, int32_t remaining = K>
-struct PolyphaseStage {
-  template<typename T, typename IR>
-  inline void operator()(float* &y, const T& x, const IR& h) const {
-    Accumulator<T::n, 1, K, mirror, 0, K - remaining> a;
-    *y++ = a(x, h);
-    PolyphaseStage<K, mirror, remaining - 1> p;
-    p(y, x, h);
-  }
-};
-
-template<int32_t K, int32_t mirror>
-struct PolyphaseStage<K, mirror, 0> {
-  template<typename T, typename IR>
-  inline void operator()(float* &y, const T& x, const IR& h) const { }
-};
-
+// nts3-mutable: loops in place of upstream's fully unrolled templates
+// (FilterState, Accumulator, PolyphaseStage), which do not fit the NTS-3's
+// 32 KB unit. Each output sums the same products in the same order (from the
+// oldest input to the newest), so the results are the same. The filters keep
+// half of their symmetric impulse response (sample_rate_conversion_filters.h):
+// tap t is stored at t below filter_size / 2, at filter_size - 1 - t above.
 template<
     SampleRateConversionDirection direction,
     int32_t ratio,
@@ -180,14 +81,44 @@ class SampleRateConverter<SRC_UP, ratio, filter_size> {
 
   inline void Process(const float* in, float* out, size_t input_size) {
     SRC_FIR<SRC_UP, ratio, filter_size> ir;
-    FilterState<N> x;
-    x.Load(x_);
+    const int32_t half = filter_size / 2;
     while (input_size--) {
-      x.Push(*in++);
-      PolyphaseStage<K, filter_size> polyphase_stage;
-      polyphase_stage(out, x, ir);
+      // x_[0] holds the newest input.
+      for (int32_t i = N - 1; i > 0; --i) {
+        x_[i] = x_[i - 1];
+      }
+      x_[0] = *in++;
+      // The K output phases side by side (independent sums, so that their
+      // additions overlap); phase p meets input i through tap p + i * K.
+      float y[K];
+      for (int32_t p = 0; p < K; ++p) {
+        y[p] = 0.0f;
+      }
+      for (int32_t i = N - 1; i >= 0; --i) {
+        const float x = x_[i];
+        const int32_t tap = i * K;
+        if (tap >= half) {
+#pragma GCC unroll 8
+          for (int32_t p = 0; p < K; ++p) {
+            y[p] = x * ir.Read(filter_size - 1 - tap - p) + y[p];
+          }
+        } else if (tap + K <= half) {
+#pragma GCC unroll 8
+          for (int32_t p = 0; p < K; ++p) {
+            y[p] = x * ir.Read(tap + p) + y[p];
+          }
+        } else {
+#pragma GCC unroll 8
+          for (int32_t p = 0; p < K; ++p) {
+            const int32_t t = tap + p;
+            y[p] = x * ir.Read(t >= half ? filter_size - 1 - t : t) + y[p];
+          }
+        }
+      }
+      for (int32_t p = 0; p < K; ++p) {
+        *out++ = y[p];
+      }
     }
-    x.Save(x_);
   }
   
  private:
@@ -215,6 +146,9 @@ class SampleRateConverter<SRC_DOWN, ratio, filter_size> {
 
   inline int32_t delay() const { return filter_size / 2; }
 
+  // nts3-mutable: upstream's circular history only. Upstream switches to a
+  // linear history for blocks of 8 filter lengths or more, which no Warps
+  // block reaches (at most 144 samples into the 108-tap filter).
   inline void Process(const float* in, float* out, size_t input_size) {
     // When downsampling, the number of input samples must be a multiple
     // of the downsampling ratio.
@@ -223,54 +157,26 @@ class SampleRateConverter<SRC_DOWN, ratio, filter_size> {
     }
 
     SRC_FIR<SRC_DOWN, ratio, filter_size> ir;
-    if (input_size >= 8 * filter_size) {
-      std::copy(&in[0], &in[N], &x_[N - 1]);
-      
-      // Generate the samples which require access to the history buffer.
-      for (int32_t i = 0; i < N; i += ratio) {
-        Accumulator<N, -1, 1, filter_size> accumulator;
-        *out++ = accumulator(&x_[N - 1 + i], ir);
-        in += ratio;
-        input_size -= ratio;
-      }
-        
-      // From now on, all the samples we need to access are located inside
-      // the input buffer passed as an argument, and since the filter
-      // is small, we can unroll the summation loop.
-      if ((input_size / ratio) & 1) {
-        while (input_size) {
-          Accumulator<N, -1, 1, filter_size> accumulator;
-          *out++ = accumulator(in, ir);
-          input_size -= ratio;
-          in += ratio;
-        }
-      } else {
-        while (input_size) {
-          Accumulator<N, -1, 1, filter_size> accumulator;
-          *out++ = accumulator(in, ir);
-          *out++ = accumulator(in + ratio, ir);
-          input_size -= 2 * ratio;
-          in += 2 * ratio;
+    while (input_size) {
+      for (int32_t i = 0; i < ratio; ++i) {
+        x_ptr_[0] = x_ptr_[N] = *in++;
+        --x_ptr_;
+        if (x_ptr_ < x_) {
+          x_ptr_ += N;
         }
       }
+      input_size -= ratio;
 
-      // Copy last input samples to history buffer.
-      std::copy(&in[-N + 1], &in[0], &x_[0]);
-    } else {
-      // Variant which uses a circular buffer to store history.
-      while (input_size) {
-        for (int32_t i = 0; i < ratio; ++i) {
-          x_ptr_[0] = x_ptr_[N] = *in++;
-          --x_ptr_;
-          if (x_ptr_ < x_) {
-            x_ptr_ += N;
-          }
-        }
-        input_size -= ratio;
-
-        Accumulator<N, 1, 1, filter_size> accumulator;
-        *out++ = accumulator(&x_ptr_[1], ir);
+      // x[i] is the input i samples old, which meets tap i.
+      const float* x = &x_ptr_[1];
+      float y = 0.0f;
+      for (int32_t i = N - 1; i >= N / 2; --i) {
+        y = x[i] * ir.Read(N - 1 - i) + y;
       }
+      for (int32_t i = N / 2 - 1; i >= 0; --i) {
+        y = x[i] * ir.Read(i) + y;
+      }
+      *out++ = y;
     }
   }
  

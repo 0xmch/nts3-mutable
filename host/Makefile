@@ -21,9 +21,9 @@ OUT := build/$(UNIT)
 SYSROOT ?= $(shell xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 FLAGS += -isysroot $(SYSROOT)
 
-HEADERS := $(shell find ../units ../third_party -name '*.h')
+HEADERS := $(shell find ../units ../third_party -name '*.h' -o -name '*.inc')
 
-$(OUT)/harness: harness.cc $(SRCS) $(HEADERS) Makefile
+$(OUT)/harness: harness.cc $(SRCS) $(HEADERS) $(PROJECT_ROOT)/config.mk Makefile
 	@mkdir -p $(OUT)
 	@for f in $(filter %.c,$(SRCS)); do \
 	  clang -std=c11 $(FLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done

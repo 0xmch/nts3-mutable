@@ -71,6 +71,7 @@ class WSOLASamplePlayer {
 
     next_pitch_ratio_ = 1.0f;
     correlator_loaded_ = true;
+    load_stage_ = 0;
     search_source_ = 0;
     search_target_ = 0;
     
@@ -127,90 +128,115 @@ class WSOLASamplePlayer {
     }
   }
   
-  template<int32_t num_channels, Resolution resolution>
-  int32_t ReadSignBits(
+  // nts3-mutable: LoadCorrelator() reads at most kSignBitsPerCall samples per
+  // call, resuming where it left off. On the module it runs in the main
+  // loop; in an NTS-3 unit it runs in the audio callback, where reading the
+  // three windows at once (up to 4900 samples, from SDRAM) took 70% of a
+  // render period. It still finishes long before WSOLA reads the result.
+  static const int32_t kSignBitsPerCall = 768;
+
+  template<Resolution resolution>
+  void StartSignBits(
       const AudioBuffer<resolution>* buffer,
       int32_t phase_increment,
       int32_t source,
       int32_t size,
       uint32_t* destination) {
-    int32_t phase = 0;
-    uint32_t bits = 0;
-    uint32_t bit_counter = 0;
-    int32_t num_samples = 0;
     if (source < 0) {
       source += buffer->size();
     }
-    while ((phase >> 16) < size) {
-      int32_t integral = source + (phase >> 16);
-      uint16_t fractional = phase & 0xffff;
+    reader_.source = source;
+    reader_.size = size;
+    reader_.phase = 0;
+    reader_.increment = phase_increment;
+    reader_.bits = 0;
+    reader_.bit_counter = 0;
+    reader_.num_samples = 0;
+    reader_.destination = destination;
+  }
+
+  // Upstream's ReadSignBits(), resumable: true once the read is complete,
+  // with the number of samples in reader_.num_samples. (The number of
+  // channels is checked at run time, not a template parameter: the code
+  // fits the 32 KB unit.)
+  template<Resolution resolution>
+  bool ContinueSignBits(
+      const AudioBuffer<resolution>* buffer,
+      int32_t* budget) {
+    SignBitsReader& r = reader_;
+    while ((r.phase >> 16) < r.size) {
+      if (*budget <= 0) {
+        return false;
+      }
+      --*budget;
+      int32_t integral = r.source + (r.phase >> 16);
+      uint16_t fractional = r.phase & 0xffff;
       float s = buffer[0].ReadLinear(integral, fractional);
-      if (num_channels == 2) {
+      if (num_channels_ == 2) {
         s += buffer[1].ReadLinear(integral, fractional);
       }
-      bits |= s > 0.0f ? 1 : 0;
-      if ((bit_counter & 0x1f) == 0x1f) {
-        destination[bit_counter >> 5] = bits;
-        num_samples += 32;
+      r.bits |= s > 0.0f ? 1 : 0;
+      if ((r.bit_counter & 0x1f) == 0x1f) {
+        r.destination[r.bit_counter >> 5] = r.bits;
+        r.num_samples += 32;
       }
-      ++bit_counter;
-      bits <<= 1;
-      phase += phase_increment;
+      ++r.bit_counter;
+      r.bits <<= 1;
+      r.phase += r.increment;
     }
-    while (bit_counter & 0x1f) {
-      if ((bit_counter & 0x1f) == 0x1f) {
-        destination[bit_counter >> 5] = bits;
-        num_samples += 32;
+    while (r.bit_counter & 0x1f) {
+      if ((r.bit_counter & 0x1f) == 0x1f) {
+        r.destination[r.bit_counter >> 5] = r.bits;
+        r.num_samples += 32;
       }
-      ++bit_counter;
-      bits <<= 1;
+      ++r.bit_counter;
+      r.bits <<= 1;
     }
-    return num_samples;
+    return true;
   }
-  
+
   template<Resolution resolution>
   void LoadCorrelator(const AudioBuffer<resolution>* buffer) {
     if (correlator_loaded_) {
       return;
     }
-    float stride = window_size_ / 2048.0f;
-    CONSTRAIN(stride, 1.0f, 2.0f);
-    stride *= 65536.0f;
-    int32_t increment = static_cast<int32_t>(
-          stride * (next_pitch_ratio_ < 1.25f ? 1.25f : next_pitch_ratio_));
-    int32_t num_samples = 0;
-    if (num_channels_ == 1) {
-      num_samples = ReadSignBits<1>(
+    int32_t budget = kSignBitsPerCall;
+    if (load_stage_ == 0) {
+      float stride = window_size_ / 2048.0f;
+      CONSTRAIN(stride, 1.0f, 2.0f);
+      stride *= 65536.0f;
+      load_increment_ = static_cast<int32_t>(
+            stride * (next_pitch_ratio_ < 1.25f ? 1.25f : next_pitch_ratio_));
+      StartSignBits(
           buffer,
-          increment,
+          load_increment_,
           search_source_,
           window_size_,
           correlator_->source());
-      ReadSignBits<1>(
+      load_stage_ = 1;
+    }
+    if (load_stage_ == 1) {
+      if (!ContinueSignBits(buffer, &budget)) {
+        return;
+      }
+      load_num_samples_ = reader_.num_samples;
+      StartSignBits(
           buffer,
-          increment,
+          load_increment_,
           search_target_ - window_size_,
           window_size_ * 2,
           correlator_->destination());
-    } else {
-      num_samples = ReadSignBits<2>(
-          buffer,
-          increment,
-          search_source_,
-          window_size_,
-          correlator_->source());
-      ReadSignBits<2>(
-          buffer,
-          increment,
-          search_target_ - window_size_,
-          window_size_ * 2,
-          correlator_->destination());
+      load_stage_ = 2;
+    }
+    if (!ContinueSignBits(buffer, &budget)) {
+      return;
     }
     correlator_->StartSearch(
-        num_samples,
+        load_num_samples_,
         search_target_ - window_size_ + (window_size_ >> 1),
-        increment);
+        load_increment_);
     correlator_loaded_ = true;
+    load_stage_ = 0;
   }
  private:
   template<Resolution resolution>
@@ -219,6 +245,8 @@ class WSOLASamplePlayer {
       Window* window) {
     int32_t next_window_position = correlator_->best_match();
     correlator_loaded_ = false;
+    load_stage_ = 0;  // nts3-mutable: a load in progress starts over
+    correlator_->Stop();
     window->Start(
         buffer->size(),
         next_window_position - (window_size_ >> 1),
@@ -275,6 +303,23 @@ class WSOLASamplePlayer {
   
   float next_pitch_ratio_;
   bool correlator_loaded_;
+
+  // nts3-mutable: LoadCorrelator()'s progress (0 not started, 1 reading the
+  // source, 2 the destination).
+  struct SignBitsReader {
+    int32_t source;
+    int32_t size;
+    int32_t phase;
+    int32_t increment;
+    uint32_t bits;
+    uint32_t bit_counter;
+    int32_t num_samples;
+    uint32_t* destination;
+  };
+  SignBitsReader reader_;
+  int32_t load_stage_;
+  int32_t load_increment_;
+  int32_t load_num_samples_;
   int32_t search_source_;
   int32_t search_target_;
   

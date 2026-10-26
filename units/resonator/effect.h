@@ -22,12 +22,19 @@
 #include "rings/dsp/part.h"
 #include "rings/dsp/strummer.h"
 #include "rings/resources.h"
+#include "stmlib/utils/buffer_allocator.h"
 
 namespace resonator {
 // Rounds SDRAM carve-outs up to 8 bytes.
 constexpr size_t Align(size_t size) { return (size + 7) & ~size_t(7); }
 // Same as rings::kSampleRate, which is not constexpr.
 constexpr float kSampleRate = 48000.0f;
+
+// Rings' state, in the unit's own RAM (see Effect::kSdramBytes), zeroed at
+// init. Outside the Effect object, which keeps a constant initializer: nothing
+// needs a static constructor at load.
+alignas(rings::Part) static uint8_t part_storage[sizeof(rings::Part)];
+alignas(rings::Strummer) static uint8_t strummer_storage[sizeof(rings::Strummer)];
 }  // namespace resonator
 
 class Effect : public Processor {
@@ -44,12 +51,16 @@ class Effect : public Processor {
     NUM_PARAMS
   };
 
-  // Everything big lives in SDRAM: the Part (strings' delay lines), the
-  // Strummer, the reverb buffer and the sine table.
+  // SDRAM: the Part's buffers (the strings' and pluckers' delay lines, the
+  // mode filters, block buffers: floats only), the reverb buffer and the sine
+  // table. The Part and the Strummer themselves live in the unit's own RAM: on
+  // the NTS-3, parts of state written to SDRAM did not read back (part of a
+  // word, now and then), and every published NTS-3 unit, Korg's included,
+  // keeps its DSP objects in static RAM and only plain sample buffers in
+  // SDRAM.
   static constexpr size_t kReverbBufferSize = 32768;  // uint16_t, as on Rings
   static constexpr size_t kSdramBytes =
-      resonator::Align(sizeof(rings::Part)) +
-      resonator::Align(sizeof(rings::Strummer)) +
+      resonator::Align(rings::kPartBufferBytes) +
       resonator::Align(kReverbBufferSize * sizeof(uint16_t)) +
       resonator::Align(LUT_SINE_SIZE * sizeof(float));
 
@@ -58,18 +69,24 @@ class Effect : public Processor {
   }
 
   void init(float* allocated_buffer) override final {
+    // Rings relies on its state starting at zero (as in the module's RAM);
+    // the unit's static RAM is not cleared when it loads.
+    std::fill(&resonator::part_storage[0],
+              &resonator::part_storage[sizeof(resonator::part_storage)], 0);
+    std::fill(&resonator::strummer_storage[0],
+              &resonator::strummer_storage[sizeof(resonator::strummer_storage)], 0);
+    part_ = new (resonator::part_storage) rings::Part();
+    strummer_ = new (resonator::strummer_storage) rings::Strummer();
     uint8_t* p = reinterpret_cast<uint8_t*>(allocated_buffer);
-    part_ = new (p) rings::Part();
-    p += resonator::Align(sizeof(rings::Part));
-    strummer_ = new (p) rings::Strummer();
-    p += resonator::Align(sizeof(rings::Strummer));
+    stmlib::BufferAllocator allocator(p, rings::kPartBufferBytes);
+    p += resonator::Align(rings::kPartBufferBytes);
     uint16_t* reverb_buffer = reinterpret_cast<uint16_t*>(p);
     p += resonator::Align(kReverbBufferSize * sizeof(uint16_t));
     float* sine = reinterpret_cast<float*>(p);
     FillSine(sine);
     rings::lut_sine = sine;
 
-    part_->Init(reverb_buffer);
+    part_->Init(reverb_buffer, &allocator);
     strummer_->Init(0.01f, rings::kSampleRate / rings::kMaxBlockSize);
     for (int i = 0; i < NUM_PARAMS; ++i) {
       setParameter(i, unit_header.common.params[i].init);
@@ -94,7 +111,7 @@ class Effect : public Processor {
     pos_ = 0;
     in_level_ = 0.0f;
     input_hold_ = 0;
-    strum_pending_ = false;
+    __atomic_store_n(&strum_pending_, false, __ATOMIC_RELEASE);
     touching_ = false;
     note_inhibit_ = 0;
     strummed_note_ = note_;
@@ -181,7 +198,7 @@ class Effect : public Processor {
     switch (phase) {
       case k_unit_touch_phase_began:
         touching_ = true;
-        strum_pending_ = true;
+        __atomic_store_n(&strum_pending_, true, __ATOMIC_RELEASE);
         break;
       case k_unit_touch_phase_ended:
       case k_unit_touch_phase_cancelled:
@@ -269,8 +286,8 @@ class Effect : public Processor {
     if (note_inhibit_) {
       --note_inhibit_;
     }
-    if (strum_pending_) {
-      strum_pending_ = false;
+    // Taken in one exchange: a touch arriving meanwhile is not lost.
+    if (__atomic_exchange_n(&strum_pending_, false, __ATOMIC_ACQ_REL)) {
       performance_state.strum = true;
     } else if (touching_ && !note_inhibit_ &&
                std::fabs(note_ - strummed_note_) > 0.4f) {
@@ -305,7 +322,7 @@ class Effect : public Processor {
   float target_wet_ = 0.75f;
   rings::ResonatorModel model_ = rings::RESONATOR_MODEL_MODAL;
   int32_t polyphony_ = 1;
-  volatile bool strum_pending_ = false;
+  bool strum_pending_ = false;  // set by touchEvent, taken by Process
   volatile bool touching_ = false;
 
   float structure_ = 0.25f;

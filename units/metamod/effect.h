@@ -1,10 +1,13 @@
 // Meta Mod and Freq Shifter: Mutable Instruments Warps as NTS-3 kaoss pad kit
 // generic effects.
 //
-// The Warps DSP (third_party/eurorack, MIT, Emilie Gillet) runs unchanged at
-// its native 96 kHz, between 48 -> 96 kHz and 96 -> 48 kHz resamplers, in
-// 48-frame blocks (the vocoder decimates by 4 and 3, so blocks are multiples
-// of 12). WARPS_SHIFTER picks the unit: 0 is Warps (cross-modulation and
+// The Warps DSP (third_party/eurorack, MIT, Emilie Gillet) runs in 0.5 ms
+// blocks (the vocoder decimates by 4 and 3, so blocks are multiples of 12),
+// at WARPS_SAMPLE_RATE (warps/dsp/rate.h). The frequency shifter runs at
+// Warps' native 96 kHz, between 48 -> 96 kHz and 96 -> 48 kHz resamplers.
+// Meta Mod runs at the NTS-3's 48 kHz: at 96 kHz it took 50-60% of the
+// device's render time in cross-modulation and hung the device in the
+// vocoder. WARPS_SHIFTER picks the unit: 0 is Warps (cross-modulation and
 // vocoder), 1 its easter egg, the frequency shifter.
 //
 // Warps has a carrier and a modulator input. With the internal oscillator as
@@ -25,7 +28,9 @@
 
 #include "stmlib/dsp/dsp.h"
 #include "stmlib/dsp/units.h"
+#include "stmlib/utils/buffer_allocator.h"
 #include "warps/dsp/modulator.h"
+#include "warps/dsp/rate.h"
 #include "warps/resources.h"
 
 #include "../common/mi_glue.h"
@@ -36,22 +41,29 @@
 
 namespace metamod {
 constexpr size_t Align(size_t size) { return (size + 7) & ~size_t(7); }
-constexpr size_t kBlock = 48;              // frames at 96 kHz
-constexpr size_t kBlockOut = kBlock / 2;   // frames at 48 kHz
-constexpr size_t kTaps = 97;               // odd, so the pair delays 48 frames
+constexpr size_t kRatio = WARPS_SAMPLE_RATE / 48000;  // Warps' rate / the NTS-3's
+constexpr size_t kBlock = 24 * kRatio;      // frames at Warps' rate
+constexpr size_t kBlockOut = kBlock / kRatio;  // frames at 48 kHz
+constexpr size_t kTaps = 97;                // odd, so the pair delays 48 frames
 constexpr size_t kFifoSize = 64;
 constexpr size_t kFifoPrefill = kBlockOut;
 // Dry path delay that lines Meta Mod's dry signal up with its wet signal
-// through the cross-modulation path: the FIFO, both resamplers and Warps' own
-// 6x oversampling (measured with host/harness).
-constexpr size_t kDryDelay = 75;
+// through the cross-modulation path: the FIFO and Warps' own 6x oversampling
+// (measured with host/harness).
+constexpr size_t kDryDelay = 41;
 constexpr size_t kDrySize = 128;
 
-// Working buffers. They live in SDRAM with Warps itself: the unit image (code,
-// data and RAM) is capped at about 32 KB.
+// Working buffers, plain samples only: they live in SDRAM with Warps' own
+// buffers (the unit image, code and RAM, is capped at 32 KB).
 struct State {
-  mi_glue::Upsampler2<kTaps> up;
-  mi_glue::Downsampler2<kTaps> down;
+#if WARPS_SAMPLE_RATE == 96000
+  // The resamplers' taps and history (Effect::up_, down_).
+  float up_storage[mi_glue::Upsampler2<kTaps>::kStorageSize];
+  float down_storage[mi_glue::Downsampler2<kTaps>::kStorageSize];
+  // Only used at init, but unit callbacks run on the firmware's stack, which
+  // has no room for it.
+  float prototype[kTaps];
+#endif
   warps::ShortFrame block_in[kBlock];
   warps::ShortFrame block_out[kBlock];
   float fifo_l[kFifoSize];
@@ -59,6 +71,11 @@ struct State {
   float dry_l[kDrySize];
   float dry_r[kDrySize];
 };
+
+// Warps' state, in the unit's own RAM (see Effect::kSdramBytes). Outside the
+// Effect object, which keeps a constant initializer: nothing needs a static
+// constructor at load.
+alignas(warps::Modulator) static uint8_t modulator_storage[sizeof(warps::Modulator)];
 }  // namespace metamod
 
 class Effect : public Processor {
@@ -69,8 +86,15 @@ class Effect : public Processor {
   enum { ALGORITHM = 0U, TIMBRE, MIX, NOTE, CARRIER, MOD_DRIVE, CARRIER_DRIVE, NUM_PARAMS };
 #endif
 
+  // SDRAM: Warps' buffers, the working buffers and the tables. The rest of
+  // Warps' state lives in metamod::modulator_storage, in the unit's own RAM:
+  // on the NTS-3, parts of state written to SDRAM did not read back (part of
+  // a word, now and then), and every published NTS-3 unit, Korg's included,
+  // keeps its DSP objects in static RAM and only plain sample buffers in
+  // SDRAM.
+  static constexpr size_t kWarpsBytes = warps::kModulatorBufferSize * sizeof(float);
   static constexpr size_t kSdramBytes =
-      metamod::Align(sizeof(warps::Modulator)) +
+      metamod::Align(kWarpsBytes) +
       metamod::Align(sizeof(metamod::State)) +
       metamod::Align(LUT_SIN_SIZE * sizeof(float)) +
       metamod::Align((LUT_MIDI_TO_F_HIGH_SIZE + LUT_MIDI_TO_F_LOW_SIZE) * sizeof(float)) +
@@ -82,15 +106,25 @@ class Effect : public Processor {
     return (kSdramBytes + sizeof(float) - 1) / sizeof(float);
   }
 
+  // The firmware's raw input (unit_runtime_genericfx_context_t), or null.
+  void setRawInput(unit_runtime_genericfx_get_raw_input_ptr get_raw_input) {
+    get_raw_input_ = get_raw_input;
+  }
+
   void init(float* allocated_buffer) override final {
+    // Warps relies on its state starting at zero (as in the module's RAM);
+    // the unit's static RAM is not cleared when it loads.
+    uint8_t* storage = metamod::modulator_storage;
+    std::fill(storage, storage + sizeof(metamod::modulator_storage), 0);
+    modulator_ = new (storage) warps::Modulator();
     uint8_t* p = reinterpret_cast<uint8_t*>(allocated_buffer);
-    modulator_ = new (p) warps::Modulator();
-    p += metamod::Align(sizeof(warps::Modulator));
+    stmlib::BufferAllocator allocator(p, kWarpsBytes);
+    p += metamod::Align(kWarpsBytes);
     s_ = new (p) metamod::State();
     p += metamod::Align(sizeof(metamod::State));
     p = BuildTables(p);
 
-    modulator_->Init(96000.0f);
+    modulator_->Init(static_cast<float>(WARPS_SAMPLE_RATE), &allocator);
     modulator_->set_easter_egg(WARPS_SHIFTER);
     modulator_->set_bypass(false);
     warps::Parameters* w = modulator_->mutable_parameters();
@@ -102,16 +136,20 @@ class Effect : public Processor {
     w->note = 60.0f;
     w->carrier_shape = 1;
 
-    float prototype[metamod::kTaps];
-    mi_glue::DesignPrototype(prototype, metamod::kTaps, 21500.0f);
-    s_->up.Init(prototype);
-    s_->down.Init(prototype);
+#if WARPS_SAMPLE_RATE == 96000
+    mi_glue::DesignPrototype(s_->prototype, metamod::kTaps, 21500.0f);
+    up_.Init(s_->prototype, s_->up_storage);
+    down_.Init(s_->prototype, s_->down_storage);
+#endif
 
     for (int i = 0; i < NUM_PARAMS; ++i) {
       setParameter(i, unit_header.common.params[i].init);
     }
     for (int i = 0; i < 4; ++i) smoothed_[i] = target_[i];
     wet_ = target_wet_;
+    note_smoothed_ = note_;
+    touching_ = false;
+    touch_gain_ = 0.0f;
     reset();
   }
 
@@ -139,18 +177,39 @@ class Effect : public Processor {
       return;
     }
     const bool internal = carrier_ != 0;
+#if !WARPS_SHIFTER
+    // The NTS-3 always adds the effect's output and crossfades its input to
+    // silence when the effect is off; on is the pad touched, or the input
+    // routed to the effect (within 60 dB of the raw input: Hold, release).
+    const float* raw = get_raw_input_ ? get_raw_input_() : nullptr;
+    if (raw) {
+      float routed = 0.0f, unrouted = 0.0f;
+      for (uint32_t i = 0; i < 2 * frames; ++i) {
+        routed += in[i] * in[i];
+        unrouted += raw[i] * raw[i];
+      }
+      if (unrouted > 1e-12f) routed_on_ = routed > 1e-6f * unrouted;
+    }
+    const float touch_target = touching_ || (raw && routed_on_) ? 1.0f : 0.0f;
+#endif
     for (uint32_t i = 0; i < frames; ++i, in += 2, out += 2) {
       // Warps' two inputs: carrier (or nothing, with the internal oscillator)
       // and modulator.
       float carrier = internal ? 0.0f : in[0];
       float modulator = internal ? 0.5f * (in[0] + in[1]) : in[1];
+#if WARPS_SAMPLE_RATE == 96000
       float up[4];
-      s_->up.Process(carrier, modulator, up);
+      up_.Process(carrier, modulator, up);
       for (int k = 0; k < 2; ++k) {
         s_->block_in[n_in_].l = ToShort(up[2 * k]);
         s_->block_in[n_in_].r = ToShort(up[2 * k + 1]);
         ++n_in_;
       }
+#else
+      s_->block_in[n_in_].l = ToShort(carrier);
+      s_->block_in[n_in_].r = ToShort(modulator);
+      ++n_in_;
+#endif
       if (n_in_ == metamod::kBlock) {
         n_in_ = 0;
         RenderBlock();
@@ -172,8 +231,16 @@ class Effect : public Processor {
       wet_ += 0.0005f * (target_wet_ - wet_);
       float dry = std::min(1.0f, 2.0f * (1.0f - wet_));
       float wet = std::min(1.0f, 2.0f * wet_);
+      // The effect follows the pad, as on a Kaoss pad: off, the wet signal
+      // fades out (about 50 ms) and the input passes dry. The NTS-3 adds the
+      // effect's output even when it is off, and Warps' internal oscillator
+      // never stops (a tone hung on after release).
+      touch_gain_ += 0.002f * (touch_target - touch_gain_);
+      if (std::fabs(touch_target - touch_gain_) < 1e-4f) touch_gain_ = touch_target;
+      dry += (1.0f - dry) * (1.0f - touch_gain_);
+      wet *= touch_gain_;
       out[0] = dry * s_->dry_l[tap] + wet * wet_l;
-      out[1] = dry * s_->dry_r[tap] + wet * wet_l;
+      out[1] = dry * s_->dry_r[tap] + wet * wet_r;
 #endif
     }
   }
@@ -207,9 +274,31 @@ class Effect : public Processor {
     }
   }
 
+#if !WARPS_SHIFTER
+  void touchEvent(uint8_t id, uint8_t phase, uint32_t x,
+                  uint32_t y) override final {
+    (void)id;
+    (void)x;
+    (void)y;
+    switch (phase) {
+      case k_unit_touch_phase_began:
+        touching_ = true;
+        break;
+      case k_unit_touch_phase_ended:
+      case k_unit_touch_phase_cancelled:
+        touching_ = false;
+        break;
+      default:
+        break;
+    }
+  }
+
+#endif
   const char* getParameterStrValue(uint8_t index,
                                    int32_t value) const override final {
+#if WARPS_SHIFTER
     static char text[16];
+#endif
     switch (index) {
 #if WARPS_SHIFTER
       case SHIFT: {
@@ -325,14 +414,14 @@ class Effect : public Processor {
     warps::lut_bipolar_fold = fold;
     p += metamod::Align(LUT_BIPOLAR_FOLD_SIZE * sizeof(float));
 
-    // MIDI note to frequency at 96 kHz, capped at 12 kHz: note (i - 48) in
-    // the high table, 1/256 semitone steps in the low one.
+    // MIDI note to frequency at Warps' rate, capped at 12 kHz: note (i - 48)
+    // in the high table, 1/256 semitone steps in the low one.
     float* midi = reinterpret_cast<float*>(p);
     for (size_t i = 0; i < LUT_MIDI_TO_F_HIGH_SIZE; ++i) {
       // stmlib's ratio table covers +-127 semitones; above that it is capped.
       float semitones = std::min(127.0f, static_cast<float>(i) - 48.0f - 69.0f);
       float f = 440.0f * stmlib::SemitonesToRatio(semitones);
-      midi[i] = std::min(f, 12000.0f) / 96000.0f;
+      midi[i] = std::min(f, 12000.0f) / static_cast<float>(WARPS_SAMPLE_RATE);
     }
     for (size_t i = 0; i < LUT_MIDI_TO_F_LOW_SIZE; ++i) {
       midi[LUT_MIDI_TO_F_HIGH_SIZE + i] = stmlib::SemitonesToRatio(static_cast<float>(i) / 256.0f);
@@ -418,16 +507,24 @@ class Effect : public Processor {
       float main = s_->block_out[i].l / 32768.0f;
       float aux = main;
 #endif
-      if (s_->down.Process(main, aux, &l, &r)) {
-        s_->fifo_l[fifo_write_] = l;
-        s_->fifo_r[fifo_write_] = r;
-        fifo_write_ = (fifo_write_ + 1) % metamod::kFifoSize;
-      }
+#if WARPS_SAMPLE_RATE == 96000
+      if (!down_.Process(main, aux, &l, &r)) continue;
+#else
+      l = main;
+      r = aux;
+#endif
+      s_->fifo_l[fifo_write_] = l;
+      s_->fifo_r[fifo_write_] = r;
+      fifo_write_ = (fifo_write_ + 1) % metamod::kFifoSize;
     }
   }
 
   warps::Modulator* modulator_ = nullptr;
   metamod::State* s_ = nullptr;
+#if WARPS_SAMPLE_RATE == 96000
+  mi_glue::Upsampler2<metamod::kTaps> up_;
+  mi_glue::Downsampler2<metamod::kTaps> down_;
+#endif
   size_t n_in_ = 0;
   size_t fifo_read_ = 0;
   size_t fifo_write_ = 0;
@@ -440,6 +537,10 @@ class Effect : public Processor {
   float smoothed_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float target_wet_ = 1.0f;
   float wet_ = 1.0f;
+  volatile bool touching_ = false;  // Meta Mod: the pad gates the effect
+  unit_runtime_genericfx_get_raw_input_ptr get_raw_input_ = nullptr;
+  bool routed_on_ = false;  // the firmware routes the input to the effect
+  float touch_gain_ = 0.0f;
   float note_ = 60.0f;
   float note_smoothed_ = 60.0f;
   int32_t carrier_ = 1;

@@ -42,6 +42,13 @@ class NoteFilter {
   NoteFilter() { }
   ~NoteFilter() { }
 
+  // nts3-mutable: the delay line's samples (kDelaySize floats), set once
+  // before Init().
+  enum { kDelaySize = 16 };
+  void set_buffer(float* buffer) {
+    delayed_stable_note_.set_line(buffer);
+  }
+
   void Init(
       float sample_rate,
       float time_constant_fast_edge,
@@ -106,7 +113,7 @@ class NoteFilter {
   float previous_values_[N];
   float note_;
   float stable_note_;
-  stmlib::DelayLine<float, 16> delayed_stable_note_;
+  stmlib::DelayLine<float, kDelaySize> delayed_stable_note_;
 
   float coefficient_;
   float stable_coefficient_;

@@ -40,7 +40,18 @@ namespace warps {
 using namespace std;
 using namespace stmlib;
 
-void Modulator::Init(float sample_rate) {
+void Modulator::Init(float sample_rate, BufferAllocator* allocator) {
+  internal_modulation_ = allocator->Allocate<float>(kMaxBlockSize);
+  for (int32_t i = 0; i < 3; ++i) {
+    buffer_[i] = allocator->Allocate<float>(kMaxBlockSize);
+  }
+#if WARPS_SAMPLE_RATE == 48000
+  transition_modulator_ = allocator->Allocate<float>(kTransitionDelay + kMaxBlockSize);
+#endif
+  for (int32_t i = 0; i < 2; ++i) {
+    src_buffer_[i] = allocator->Allocate<float>(kMaxBlockSize * kOversampling);
+  }
+
   bypass_ = false;
   easter_egg_ = false;
   
@@ -54,12 +65,15 @@ void Modulator::Init(float sample_rate) {
   xmod_oscillator_.Init(sample_rate);
   vocoder_oscillator_.Init(sample_rate);
   quadrature_oscillator_.Init(sample_rate);
-  vocoder_.Init(sample_rate);
+  vocoder_.Init(sample_rate, allocator);
   
   previous_parameters_.carrier_shape = 0;
   previous_parameters_.channel_drive[0] = 0.0f;
   previous_parameters_.channel_drive[1] = 0.0f;
   previous_parameters_.modulation_algorithm = 0.0f;
+#if WARPS_SAMPLE_RATE == 48000
+  fill(&transition_modulator_[0], &transition_modulator_[kTransitionDelay], 0.0f);
+#endif
   previous_parameters_.modulation_parameter = 0.0f;
   previous_parameters_.note = 48.0f;
 
@@ -189,9 +203,11 @@ void Modulator::Process(ShortFrame* input, ShortFrame* output, size_t size) {
   if (bypass_) {
     copy(&input[0], &input[size], &output[0]);
     return;
+#if WARPS_PROCESS_EASTER_EGG
   } else if (easter_egg_) {
     ProcessEasterEgg(input, output, size);
     return;
+#endif
   }
   float* carrier = buffer_[0];
   float* modulator = buffer_[1];
@@ -325,11 +341,22 @@ void Modulator::Process(ShortFrame* input, ShortFrame* output, size_t size) {
   float transition_gain = 2.0f * (vocoder_amount < 0.5f
       ? vocoder_amount
       : 1.0f - vocoder_amount);
+#if WARPS_SAMPLE_RATE == 48000
+  // nts3-mutable: the modulator, kTransitionDelay samples late (modulator.h).
+  copy(&modulator[0], &modulator[size], &transition_modulator_[kTransitionDelay]);
+  const float* raw_modulator = transition_modulator_;
+#else
+  const float* raw_modulator = modulator;
+#endif
   if (transition_gain != 0.0f) {
     for (size_t i = 0; i < size; ++i) {
-      main_output[i] += transition_gain * (modulator[i] - main_output[i]);
+      main_output[i] += transition_gain * (raw_modulator[i] - main_output[i]);
     }
   }
+#if WARPS_SAMPLE_RATE == 48000
+  copy(&transition_modulator_[size], &transition_modulator_[size + kTransitionDelay],
+       &transition_modulator_[0]);
+#endif
 
   // Convert back to integer and clip.
   while (size--) {
@@ -374,6 +401,11 @@ inline float Modulator::Xmod<ALGORITHM_FOLD>(
   sum += x_1 * x_2 * 0.25f;
   sum *= 0.02f + parameter;
   const float kScale = 2048.0f / ((1.0f + 1.0f + 0.25f) * 1.02f);
+  // nts3-mutable: past the table's range (inputs over full scale, as in the
+  // cross-modulation to vocoder crossfade), upstream reads outside the table.
+  // Clamped to its ends instead.
+  const float kLimit = 2047.0f / kScale;
+  CONSTRAIN(sum, -kLimit, kLimit);
   return Interpolate(lut_bipolar_fold + 2048, sum, kScale);
 }
 

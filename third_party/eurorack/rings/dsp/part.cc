@@ -37,7 +37,23 @@ namespace rings {
 using namespace std;
 using namespace stmlib;
 
-void Part::Init(uint16_t* reverb_buffer) {
+void Part::Init(uint16_t* reverb_buffer, BufferAllocator* allocator) {
+  for (int32_t i = 0; i < kNumStrings; ++i) {
+    float* string = allocator->Allocate<float>(kDelayLineSize);
+    float* stretch = allocator->Allocate<float>(kDelayLineSize / 2);
+    string_[i].set_buffers(string, stretch);
+  }
+  for (int32_t i = 0; i < kMaxPolyphony; ++i) {
+    plucker_[i].set_buffer(allocator->Allocate<float>(Plucker::kCombFilterSize));
+    resonator_[i].set_filters(allocator->Allocate<Svf>(kMaxModes));
+  }
+  note_filter_.set_buffer(allocator->Allocate<float>(NoteFilter::kDelaySize));
+  resonator_input_ = allocator->Allocate<float>(kMaxBlockSize);
+  sympathetic_resonator_input_ = allocator->Allocate<float>(kMaxBlockSize);
+  noise_burst_buffer_ = allocator->Allocate<float>(kMaxBlockSize);
+  out_buffer_ = allocator->Allocate<float>(kMaxBlockSize);
+  aux_buffer_ = allocator->Allocate<float>(kMaxBlockSize);
+
   active_voice_ = 0;
   
   fill(&note_[0], &note_[kMaxPolyphony], 0.0f);

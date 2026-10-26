@@ -38,9 +38,10 @@ namespace warps {
 using namespace std;
 using namespace stmlib;
 
-void Vocoder::Init(float sample_rate) {
-  modulator_filter_bank_.Init(sample_rate);
-  carrier_filter_bank_.Init(sample_rate);
+void Vocoder::Init(float sample_rate, BufferAllocator* allocator) {
+  tmp_ = allocator->Allocate<float>(kMaxFilterBankBlockSize);
+  modulator_filter_bank_.Init(sample_rate, allocator);
+  carrier_filter_bank_.Init(sample_rate, allocator);
   limiter_.Init();
 
   release_time_ = 0.5f;

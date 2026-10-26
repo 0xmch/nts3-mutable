@@ -37,6 +37,9 @@
 namespace warps {
 
 const float kFollowerGain = sqrtf(kNumBands);
+// nts3-mutable: the floats a Vocoder takes from its allocator (Init).
+const int32_t kVocoderBufferSize =
+    kMaxFilterBankBlockSize + 2 * kFilterBankBufferSize;
 
 class EnvelopeFollower {
  public:
@@ -102,7 +105,7 @@ class Vocoder {
   Vocoder() { }
   ~Vocoder() { }
   
-  void Init(float sample_rate);
+  void Init(float sample_rate, stmlib::BufferAllocator* allocator);
   void Process(
       const float* modulator,
       const float* carrier,
@@ -124,7 +127,7 @@ class Vocoder {
   BandGain previous_gain_[kNumBands];
   BandGain gain_[kNumBands];
 
-  float tmp_[kMaxFilterBankBlockSize];
+  float* tmp_;  // nts3-mutable: from the allocator, as FilterBank's buffers
    
   FilterBank modulator_filter_bank_;
   FilterBank carrier_filter_bank_;

@@ -37,6 +37,15 @@
 
 #include "clouds/resources.h"
 
+#ifdef NTS3_METER_PROFILE
+// nts3-mutable diagnostic builds only (units/common/meter.h): the most cycles
+// LoadCorrelator() and EvaluateSomeCandidates() took in one call.
+extern uint32_t nts3_profile_max[2];
+static inline uint32_t Nts3Cycles() {
+  return *reinterpret_cast<volatile uint32_t*>(0xE0001004u);
+}
+#endif
+
 namespace clouds {
 
 using namespace std;
@@ -44,7 +53,17 @@ using namespace stmlib;
 
 void GranularProcessor::Init(
     void* large_buffer, size_t large_buffer_size,
-    void* small_buffer, size_t small_buffer_size) {
+    void* small_buffer, size_t small_buffer_size,
+    BufferAllocator* allocator) {
+  in_ = allocator->Allocate<FloatFrame>(kMaxBlockSize);
+  in_downsampled_ = allocator->Allocate<FloatFrame>(kMaxBlockSize / kDownsamplingFactor);
+  out_downsampled_ = allocator->Allocate<FloatFrame>(kMaxBlockSize / kDownsamplingFactor);
+  out_ = allocator->Allocate<FloatFrame>(kMaxBlockSize);
+  fb_ = allocator->Allocate<FloatFrame>(kMaxBlockSize);
+  for (int32_t i = 0; i < 2; ++i) {
+    tail_buffer_[i] = allocator->Allocate<int16_t>(kTailBufferSize);
+  }
+
   buffer_[0] = large_buffer;
   buffer_[1] = small_buffer;
   buffer_size_[0] = large_buffer_size;
@@ -54,8 +73,8 @@ void GranularProcessor::Init(
   low_fidelity_ = false;
   bypass_ = false;
   
-  src_down_.Init();
-  src_up_.Init();
+  src_down_.Init(allocator);
+  src_up_.Init(allocator);
   
   ResetFilters();
   
@@ -453,12 +472,23 @@ void GranularProcessor::Prepare() {
   if (playback_mode_ == PLAYBACK_MODE_SPECTRAL) {
     phase_vocoder_.Buffer();
   } else if (playback_mode_ == PLAYBACK_MODE_STRETCH) {
+#ifdef NTS3_METER_PROFILE
+    uint32_t t0 = Nts3Cycles();
+#endif
     if (resolution() == 8) {
       ws_player_.LoadCorrelator(buffer_8_);
     } else {
       ws_player_.LoadCorrelator(buffer_16_);
     }
+#ifdef NTS3_METER_PROFILE
+    uint32_t t1 = Nts3Cycles();
+#endif
     correlator_.EvaluateSomeCandidates();
+#ifdef NTS3_METER_PROFILE
+    uint32_t t2 = Nts3Cycles();
+    if (t1 - t0 > nts3_profile_max[0]) nts3_profile_max[0] = t1 - t0;
+    if (t2 - t1 > nts3_profile_max[1]) nts3_profile_max[1] = t2 - t1;
+#endif
   }
 }
 

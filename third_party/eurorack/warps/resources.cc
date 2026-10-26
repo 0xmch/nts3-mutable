@@ -31,6 +31,7 @@
 
 
 #include "warps/resources.h"
+#include "warps/dsp/rate.h"
 
 namespace warps {
 
@@ -116,6 +117,10 @@ const float fb_7040_96000[] = {
 };
 
 
+// nts3-mutable: the filter bank depends on the sample rate (dsp/rate.h).
+#if WARPS_SAMPLE_RATE == 48000
+#include "warps/filter_bank_48k.inc"
+#else
 const float* filter_bank_table[] = {
   fb__87_8000,
   fb_110_8000,
@@ -138,6 +143,8 @@ const float* filter_bank_table[] = {
   fb_5588_32000,
   fb_7040_96000,
 };
+#endif  // WARPS_SAMPLE_RATE
+
 
 // nts3-mutable: generated at init into SDRAM instead, see resources.h.
 const float* lut_sin = 0;

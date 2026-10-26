@@ -50,6 +50,18 @@ class Correlator {
 
   inline void EvaluateSomeCandidates() {
     size_t num_candidates = (size_ >> 2) + 16;
+    // nts3-mutable: at most kMaxWordsPerCall words compared per call (about
+    // 13% of a render period). On the module this runs in the main loop; in
+    // an NTS-3 unit it runs in the audio callback, where a quarter of a
+    // 4096-sample search (131k words) took 1.5 render periods. Searches over
+    // windows up to about 1600 samples still finish before WSOLA reads the
+    // result; longer ones are cut short, as they are on the module, whose
+    // main loop does not finish them in time either.
+    const size_t kMaxWordsPerCall = 4096;
+    const size_t max_candidates = kMaxWordsPerCall / ((size_ >> 5) + 1);
+    if (num_candidates > max_candidates) {
+      num_candidates = max_candidates;
+    }
     while (num_candidates) {
       EvaluateNextCandidate();
       --num_candidates;
@@ -63,6 +75,9 @@ class Correlator {
   inline int32_t candidate() { return candidate_; }
 
   inline bool done() { return done_; }
+
+  // nts3-mutable: abandons the search in progress (its result was used).
+  inline void Stop() { done_ = true; }
   
  private:
   uint32_t* source_;

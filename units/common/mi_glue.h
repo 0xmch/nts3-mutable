@@ -67,17 +67,23 @@ inline void DesignPrototype(float* h, size_t taps = kProtoTaps,
 
 // Rational resampler, stereo, by L/M through a 96 kHz prototype of TAPS taps.
 // The history is stored twice so a filter pass always reads contiguous
-// samples.
+// samples. The taps and the history (kStorageSize floats) live in storage
+// handed over at Init(), in SDRAM: units keep only plain buffers there, and
+// their state (here the history's head) in their own RAM.
 template <int L, int M, size_t TAPS = kProtoTaps>
 class Resampler {
  public:
   static const size_t kTapsPerPhase = (TAPS + L - 1) / L;
+  static const size_t kStorageSize = (L + 4) * kTapsPerPhase;
 
-  void Init(const float* prototype) {
+  void Init(const float* prototype, float* storage) {
+    taps_ = storage;
+    history_l_ = storage + L * kTapsPerPhase;
+    history_r_ = history_l_ + 2 * kTapsPerPhase;
     for (int p = 0; p < L; ++p) {
       for (size_t i = 0; i < kTapsPerPhase; ++i) {
         size_t n = p + L * i;
-        taps_[p][i] = n < TAPS ? L * prototype[n] : 0.0f;
+        taps_[p * kTapsPerPhase + i] = n < TAPS ? L * prototype[n] : 0.0f;
       }
     }
     for (size_t i = 0; i < 2 * kTapsPerPhase; ++i) {
@@ -94,7 +100,7 @@ class Resampler {
 
   // Output at `phase` 96 kHz ticks after the newest pushed sample.
   inline void Read(int phase, float* l, float* r) const {
-    const float* t = taps_[phase];
+    const float* t = &taps_[phase * kTapsPerPhase];
     const float* hl = &history_l_[head_];
     const float* hr = &history_r_[head_];
     float sl = 0.0f, sr = 0.0f;
@@ -107,9 +113,9 @@ class Resampler {
   }
 
  private:
-  float taps_[L][kTapsPerPhase];
-  float history_l_[2 * kTapsPerPhase];
-  float history_r_[2 * kTapsPerPhase];
+  float* taps_;  // L phases of kTapsPerPhase
+  float* history_l_;
+  float* history_r_;
   size_t head_;
 };
 
@@ -119,8 +125,9 @@ class Resampler {
 // below 2, from inputs up to the newest only.
 class Downsampler {
  public:
-  void Init(const float* prototype) {
-    resampler_.Init(prototype);
+  static const size_t kStorageSize = Resampler<2, 3>::kStorageSize;
+  void Init(const float* prototype, float* storage) {
+    resampler_.Init(prototype, storage);
     phase_ = 2;
   }
   // Returns true when a 32 kHz frame was produced.
@@ -142,8 +149,9 @@ class Downsampler {
 // and a 32 kHz input is consumed every 3 ticks.
 class Upsampler {
  public:
-  void Init(const float* prototype) {
-    resampler_.Init(prototype);
+  static const size_t kStorageSize = Resampler<3, 2>::kStorageSize;
+  void Init(const float* prototype, float* storage) {
+    resampler_.Init(prototype, storage);
     phase_ = 1;
   }
   // How many 32 kHz frames the next Process() call will consume (0 or 1).
@@ -166,7 +174,10 @@ class Upsampler {
 template <size_t TAPS>
 class Upsampler2 {
  public:
-  void Init(const float* prototype) { resampler_.Init(prototype); }
+  static const size_t kStorageSize = Resampler<2, 1, TAPS>::kStorageSize;
+  void Init(const float* prototype, float* storage) {
+    resampler_.Init(prototype, storage);
+  }
   // out: l0, r0, l1, r1.
   inline void Process(float l, float r, float* out) {
     resampler_.Push(l, r);
@@ -182,8 +193,9 @@ class Upsampler2 {
 template <size_t TAPS>
 class Downsampler2 {
  public:
-  void Init(const float* prototype) {
-    resampler_.Init(prototype);
+  static const size_t kStorageSize = Resampler<1, 2, TAPS>::kStorageSize;
+  void Init(const float* prototype, float* storage) {
+    resampler_.Init(prototype, storage);
     odd_ = false;
   }
   // Returns true when a 48 kHz frame was produced.

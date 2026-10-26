@@ -57,7 +57,11 @@ void Correlator::EvaluateNextCandidate() {
     uint32_t source_bits = source[i];
     uint32_t destination_bits = 0;
     destination_bits |= destination[i] << offset_bits;
-    destination_bits |= destination[i + 1] >> (32 - offset_bits);
+    // nts3-mutable: a shift by 32 (word-aligned candidate) is undefined in C;
+    // ARM, upstream's target, gives 0, the host and WebAssembly the word.
+    if (offset_bits) {
+      destination_bits |= destination[i + 1] >> (32 - offset_bits);
+    }
     uint32_t count = ~(source_bits ^ destination_bits);
     count = count - ((count >> 1) & 0x55555555);
     count = (count & 0x33333333) + ((count >> 2) & 0x33333333);

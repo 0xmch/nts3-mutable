@@ -182,12 +182,17 @@ const float lut_xfade_in[] = {
    5.000000000e-01,  5.483582988e-01,  5.910050530e-01,  6.274960661e-01,
    6.574512582e-01,  6.805586243e-01,  6.965774847e-01,  7.053409916e-01,
    7.071067812e-01,
+   // nts3-mutable: the last value again. Interpolate(table, 1.0f, 16.0f)
+   // reads entry 17 (with weight 0); upstream reads past the end there.
+   7.071067812e-01,
 };
 const float lut_xfade_out[] = {
    7.071067812e-01,  7.053409916e-01,  6.965774847e-01,  6.805586243e-01,
    6.574512582e-01,  6.274960661e-01,  5.910050530e-01,  5.483582988e-01,
    5.000000000e-01,  4.464338430e-01,  3.882177576e-01,  3.259581062e-01,
    2.603033675e-01,  1.919373828e-01,  1.215722327e-01,  4.994082069e-02,
+   4.329780281e-17,
+   // nts3-mutable: the last value again (see lut_xfade_in).
    4.329780281e-17,
 };
 // nts3-mutable: generated at init into SDRAM instead, see resources.h.

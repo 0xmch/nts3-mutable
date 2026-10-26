@@ -37,7 +37,12 @@ namespace warps {
 using namespace std;
 using namespace stmlib;
 
-void FilterBank::Init(float sample_rate) {
+void FilterBank::Init(float sample_rate, BufferAllocator* allocator) {
+  tmp_[0] = allocator->Allocate<float>(kMaxFilterBankBlockSize);
+  tmp_[1] = allocator->Allocate<float>(kMaxFilterBankBlockSize);
+  samples_ = allocator->Allocate<float>(kSampleMemorySize);
+  delay_buffer_ = allocator->Allocate<float>(kDelayLineSize);
+
   low_src_down_.Init();
   low_src_up_.Init();
   mid_src_down_.Init();
@@ -78,7 +83,8 @@ void FilterBank::Init(float sample_rate) {
     }
   }
   band_[kNumBands].group = band_[kNumBands - 1].group + 1;
-  max_delay = min(max_delay, int32_t(256));
+  // nts3-mutable: 256 samples at 96 kHz, the same 2.7 ms at other rates.
+  max_delay = min(max_delay, int32_t(256 * WARPS_SAMPLE_RATE / 96000));
   float* delay_ptr = &delay_buffer_[0];
   for (int32_t i = 0; i < kNumBands; ++i) {
     Band& b = band_[i];

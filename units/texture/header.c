@@ -39,6 +39,18 @@
 
 #include "unit_genericfx.h"
 
+// Mix starts mostly wet (about 75% on Clouds' blend scale): the NTS-3 runs
+// the effect only while the pad is touched, and a touch should be heard.
+#define TEXTURE_MIX_INIT 500
+
+// Metered diagnostic builds (units/common/meter.h) take their own unit ID, so
+// the device lists them next to the regular unit instead of merging the two.
+#ifdef NTS3_METER
+#define UNIT_ID(id) ((id) | 0x40U)
+#else
+#define UNIT_ID(id) (id)
+#endif
+
 #ifndef TEXTURE_MODE
 #define TEXTURE_MODE 0
 #endif
@@ -75,7 +87,7 @@ const __unit_header genericfx_unit_header_t unit_header = {
     .target = UNIT_TARGET_PLATFORM | k_unit_module_genericfx,
     .api = UNIT_API_VERSION,
     .dev_id = 0x30784D43U,  // '0xMC'
-    .unit_id = TEXTURE_UNIT_ID,
+    .unit_id = UNIT_ID(TEXTURE_UNIT_ID),
     .version = 0x00010000U,
     .name = TEXTURE_NAME,
     .num_params = 8,
@@ -84,7 +96,7 @@ const __unit_header genericfx_unit_header_t unit_header = {
       // Format: min, max, center, default, type, frac. bits, frac. mode, <reserved>, name
       {0, 1000, 0, 0, k_unit_param_type_percent, 1, 1, 0, {"Position"}},
       {0, 1000, 0, 500, k_unit_param_type_percent, 1, 1, 0, {"Size"}},
-      {-1000, 1000, 0, 0, k_unit_param_type_drywet, 1, 1, 0, {"Mix"}},
+      {-1000, 1000, 0, TEXTURE_MIX_INIT, k_unit_param_type_drywet, 1, 1, 0, {"Mix"}},
       {-24, 24, 0, 0, k_unit_param_type_semi, 0, 0, 0, {"Pitch"}},
       {0, 1000, 0, TEXTURE_DENSITY_INIT, k_unit_param_type_percent, 1, 1, 0, {"Density"}},
       {0, 1000, 0, 500, k_unit_param_type_percent, 1, 1, 0, {"Texture"}},
@@ -95,7 +107,7 @@ const __unit_header genericfx_unit_header_t unit_header = {
     // Format: assign, curve, curve polarity, min, max, default value
     {k_genericfx_param_assign_x, k_genericfx_curve_linear, k_genericfx_curve_unipolar, 0, 1000, 0},
     {k_genericfx_param_assign_y, k_genericfx_curve_linear, k_genericfx_curve_unipolar, 0, 1000, 500},
-    {k_genericfx_param_assign_depth, k_genericfx_curve_linear, k_genericfx_curve_unipolar, -1000, 1000, 0},
+    {k_genericfx_param_assign_depth, k_genericfx_curve_linear, k_genericfx_curve_unipolar, -1000, 1000, TEXTURE_MIX_INIT},
     {k_genericfx_param_assign_none, k_genericfx_curve_linear, k_genericfx_curve_unipolar, -24, 24, 0},
     {k_genericfx_param_assign_none, k_genericfx_curve_linear, k_genericfx_curve_unipolar, 0, 1000, TEXTURE_DENSITY_INIT},
     {k_genericfx_param_assign_none, k_genericfx_curve_linear, k_genericfx_curve_unipolar, 0, 1000, 500},

@@ -14,24 +14,24 @@ const UNITS = [
     how: 'X picks the note, Y the structure. Each touch strums a new voice, and so does dragging to a new semitone. With Silence as the input, a tap plucks the strings.',
   },
   {
-    id: 'texture', title: 'Texture', short: 'Texture', module: 'Clouds · granular', source: 'chords', touchLabel: 'freeze',
+    id: 'texture', title: 'Texture', short: 'Texture', module: 'Clouds · granular', source: 'chords', touchLabel: 'touch',
     blurb: 'Plays overlapping grains taken from the last second of input.',
-    how: 'Touch to freeze the buffer and drag to scrub through it; release to let new audio in. X is the position, Y the grain size. With Density at 50%, each tap plays one grain.',
+    how: 'Touch to play the grains and drag through the last second: X is the position, Y the grain size. Each tap also fires a grain, and with Density at 50% those are the only ones.',
   },
   {
-    id: 'texture_lofi', title: 'Texture Lo-Fi', short: 'Lo-Fi', module: 'Clouds · lo-fi', source: 'chords', touchLabel: 'freeze',
+    id: 'texture_lofi', title: 'Texture Lo-Fi', short: 'Lo-Fi', module: 'Clouds · lo-fi', source: 'chords', touchLabel: 'touch',
     blurb: "Clouds' granular mode in its lo-fi quality: mono, 8-bit mu-law samples at 16 kHz, with about seven seconds of buffer.",
-    how: 'Same controls as Texture: touch to freeze and scrub, X is the position, Y the grain size. Position reaches further back.',
+    how: 'Same controls as Texture: X is the position, Y the grain size. Position reaches further back.',
   },
   {
-    id: 'texture_stretch', title: 'Texture Stretch', short: 'Stretch', module: 'Clouds · stretch', source: 'chords', touchLabel: 'freeze',
+    id: 'texture_stretch', title: 'Texture Stretch', short: 'Stretch', module: 'Clouds · stretch', source: 'chords', touchLabel: 'touch',
     blurb: 'Time-stretches and pitch-shifts the last second of input with WSOLA (waveform-similarity overlap-add).',
-    how: 'Touch to freeze, then drag X through the frozen second. Y sets the window size, Density adds diffusion, and Texture sweeps a low-pass or high-pass filter.',
+    how: 'Touch to play and drag X through the last second of input. Y sets the window size, Density adds diffusion, and Texture sweeps a low-pass or high-pass filter.',
   },
   {
-    id: 'texture_loop', title: 'Texture Loop', short: 'Loop', module: 'Clouds · looping delay', source: 'chords', touchLabel: 'loop',
+    id: 'texture_loop', title: 'Texture Loop', short: 'Loop', module: 'Clouds · looping delay', source: 'chords', touchLabel: 'tap',
     blurb: 'A delay that turns into a looper, with a pitch shifter on its output.',
-    how: 'X sets the delay time. Touch to capture a loop and keep it playing; Y sets its length and Pitch transposes it.',
+    how: 'X sets the delay time, Y the pitch shifter window and Pitch its transposition. Two taps set the delay to the time between them, as tap tempo.',
   },
   {
     id: 'metamod', title: 'Meta Mod', short: 'Meta Mod', module: 'Warps', source: 'chords', touchLabel: 'touch',
@@ -176,6 +176,7 @@ const unmapLinear = (map, value) => (map.max === map.min ? 0.5 : clamp((value - 
 
 const state = {
   unit: null,          // entry of UNITS
+  shown: null,         // the unit the controls are for, once its description is in
   describe: null,
   values: [],
   saved: new Map(),    // per-unit parameter values, kept across tab switches
@@ -190,6 +191,7 @@ const state = {
   file: null,
   startSource: [...SOURCES.map((s) => s.id), 'silence'].includes(params.get('src')) ? params.get('src') : null,
   token: 0,
+  ready: 0,            // token of the load whose instance is running
   recording: null,
 };
 
@@ -197,12 +199,18 @@ function post(msg, transfer) {
   if (state.node) state.node.port.postMessage(msg, transfer || []);
 }
 
+// Parameters and touches only go to the instance of the latest load. Until it
+// is ready they stay in state, and onWorkletMessage replays them then.
+function postControl(msg) {
+  if (state.ready === state.token) post(msg);
+}
+
 function setParam(id, value, { fromPad = false } = {}) {
   const p = state.describe.params[id];
   value = clamp(Math.round(value), p.min, p.max);
   if (state.values[id] === value) return;
   state.values[id] = value;
-  post({ type: 'param', id, value });
+  postControl({ type: 'param', id, value });
   updateControl(id);
   if (!fromPad) {
     // A knob on a pad axis or the depth slider moves that control with it.
@@ -229,6 +237,7 @@ function saveUrl() {
     url.searchParams.set('p', state.values.join('.'));
     const src = state.source.id || state.startSource;
     if (src && src !== 'file' && src !== 'live') url.searchParams.set('src', src);
+    if (src !== 'file') url.searchParams.delete('file');
     history.replaceState(null, '', url);
     url.searchParams.delete('embed');
     $('fullpage').href = url.href;
@@ -417,12 +426,16 @@ function updateAxes() {
 
 async function selectUnit(id) {
   const unit = UNITS.find((u) => u.id === id) || UNITS[0];
-  if (state.describe && state.unit) state.saved.set(state.unit.id, { values: state.values.slice(), pad: { ...state.pad }, depth: state.depth });
+  if (state.shown) state.saved.set(state.shown.id, { values: state.values.slice(), pad: { ...state.pad }, depth: state.depth });
   if (state.pad.touching) touch(PHASE.ENDED);
   state.unit = unit;
   document.querySelectorAll('.unit-tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.unit === unit.id)));
 
-  state.describe = await describeUnit(unit.id);
+  const describe = await describeUnit(unit.id);
+  if (state.unit !== unit) return; // a later selection takes over
+  state.shown = unit;
+  state.describe = describe;
+  state.ready = 0; // no instance has these controls yet
   const saved = state.saved.get(unit.id);
   const list = state.describe.params;
   const fromUrl = saved ? null : urlValues(unit.id, list);
@@ -451,10 +464,17 @@ async function selectUnit(id) {
   if (state.ctx) await loadUnitAudio();
 }
 
+// Loads the unit the controls are for. It takes the unit and its values before
+// waiting for the bytes, since the selection can change meanwhile; a load
+// overtaken by a newer one is dropped.
 async function loadUnitAudio() {
+  if (!state.shown) return; // the first selection loads once it is in
   const token = ++state.token;
-  const bytes = (await unitBytes(state.unit.id)).slice(0);
-  post({ type: 'load', token, bytes, params: state.values.map((v, id) => [id, v]) }, [bytes]);
+  const { id } = state.shown;
+  const params = state.values.map((v, i) => [i, v]);
+  const bytes = (await unitBytes(id)).slice(0);
+  if (token !== state.token) return;
+  post({ type: 'load', token, bytes, params }, [bytes]);
 }
 
 // ---- audio -------------------------------------------------------------------
@@ -482,7 +502,9 @@ async function startAudio() {
     applyVolume();
     await loadUnitAudio();
     await ctx.resume();
-    await selectSource(state.startSource || state.unit.source);
+    const file = params.get('file') && await fetchFile(params.get('file')).catch(() => null);
+    if (file) await loadFile(file);
+    else await selectSource(state.startSource || state.unit.source);
     // The other loops render in the background.
     SOURCES.forEach((s) => renderSource(ctx.sampleRate, s.id));
     $('start').hidden = true;
@@ -516,7 +538,13 @@ function onWorkletMessage(msg) {
     state.recording.r.push(msg.r);
     state.recording.frames += msg.l.length;
     if (state.recording.frames > state.ctx.sampleRate * 300) toggleRecord();
-  } else if (msg.type === 'error') toast(`Unit error: ${msg.message}`);
+  } else if (msg.type === 'ready' && msg.token === state.token) {
+    // The latest load is running: send it the controls as they are now,
+    // including changes made while it loaded.
+    state.ready = msg.token;
+    state.values.forEach((value, id) => post({ type: 'param', id, value }));
+    if (state.pad.touching) post({ type: 'touch', phase: PHASE.BEGAN, x: Math.round(state.pad.x * 1023), y: Math.round(state.pad.y * 1023) });
+  } else if (msg.type === 'error' && msg.token === state.token) toast(`Unit error: ${msg.message}`);
 }
 
 function stopSource() {
@@ -561,6 +589,13 @@ async function selectSource(id) {
   document.querySelectorAll('#sources .chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.source === id)));
   if (id === 'live' || id === 'silence' || id === 'file') toast(note);
   saveUrl();
+}
+
+// ?file=<url> starts on an audio file from the same site instead of a loop.
+async function fetchFile(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return new File([await res.blob()], decodeURIComponent(url.split('/').pop()));
 }
 
 async function loadFile(file) {
@@ -709,7 +744,7 @@ function touch(phase) {
   } else if (phase === PHASE.ENDED) {
     state.pad.touching = false;
   }
-  post({ type: 'touch', phase, x, y });
+  postControl({ type: 'touch', phase, x, y });
   updatePadState();
 }
 
@@ -727,7 +762,7 @@ function moveTo(x, y) {
   state.pad.y = clamp(y, 0, 1);
   applyPad();
   if (state.pad.touching) {
-    post({ type: 'touch', phase: PHASE.MOVED, x: Math.round(state.pad.x * 1023), y: Math.round(state.pad.y * 1023) });
+    postControl({ type: 'touch', phase: PHASE.MOVED, x: Math.round(state.pad.x * 1023), y: Math.round(state.pad.y * 1023) });
     trail.push({ x: state.pad.x, y: state.pad.y, t: performance.now() });
   }
 }

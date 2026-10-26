@@ -15,6 +15,7 @@ class UnitProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.unit = null;
+    this.token = 0;
     this.bypass = false;
     this.recording = false;
     this.peak = [0, 0];
@@ -25,8 +26,11 @@ class UnitProcessor extends AudioWorkletProcessor {
   async onMessage(msg) {
     switch (msg.type) {
       case 'load': {
+        // Loads can finish out of order: only the latest one may take over.
+        this.token = msg.token;
         try {
           const { instance } = await WebAssembly.instantiate(msg.bytes, {});
+          if (msg.token !== this.token) return;
           const e = instance.exports;
           if (e._initialize) e._initialize();
           if (!e.nts3_init()) throw new Error('unit init failed');

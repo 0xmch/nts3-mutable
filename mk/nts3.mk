@@ -1,8 +1,9 @@
 # nts3-mutable: the logue SDK NTS-3 dummy-genericfx Makefile (BSD 3-Clause,
 # KORG), with SDK paths taken from $(LOGUE_SDK) so units can live outside
 # the SDK tree, UCXXDEFS for C++-only flags, and UWASMDEFS and WASMMAIN for
-# the websim build. `make wasm` no longer launches emrun (scripts/sim.sh serves the page)
-# and starts the page volume at 0.05 instead of 0.5.
+# the websim build, and EXTRA_DEFS for diagnostic builds. `make wasm` no
+# longer launches emrun (scripts/sim.sh serves the page) and starts the page
+# volume at 0.05 instead of 0.5.
 
 LOGUE_SDK ?= $(HOME)/src/logue-sdk
 
@@ -41,6 +42,9 @@ LDDIR ?= $(LOGUE_SDK)/platform/nts-3_kaoss/ld
 #
 
 include config.mk
+
+# Diagnostic builds (scripts/bench.sh) pass their defines here.
+UDEFS += $(EXTRA_DEFS)
 
 ##############################################################################
 # Common defaults
@@ -160,8 +164,9 @@ MCFLAGS   := -mcpu=$(MCU)
 ODFLAGS	  := -x --syms
 ASFLAGS   = $(MCFLAGS) -g $(TOPT) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.s=.lst)) $(ADEFS)
 ASXFLAGS  = $(MCFLAGS) -g $(TOPT) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.S=.lst)) $(ADEFS)
-CFLAGS    = $(MCFLAGS) $(TOPT) $(OPT) $(COPT) $(CWARN) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.c=.lst)) $(DEFS)
-CXXFLAGS  = $(MCFLAGS) $(TOPT) $(OPT) $(CXXOPT) $(CXXWARN) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.cc=.lst)) $(DEFS) $(UCXXDEFS)
+# -MMD -MP: each object's header dependencies, read back at the end.
+CFLAGS    = $(MCFLAGS) $(TOPT) $(OPT) $(COPT) $(CWARN) -MMD -MP -Wa,-alms=$(LSTDIR)/$(notdir $(<:.c=.lst)) $(DEFS)
+CXXFLAGS  = $(MCFLAGS) $(TOPT) $(OPT) $(CXXOPT) $(CXXWARN) -MMD -MP -Wa,-alms=$(LSTDIR)/$(notdir $(<:.cc=.lst)) $(DEFS) $(UCXXDEFS)
 LDFLAGS   := $(MCFLAGS) $(TOPT) $(OPT) -nostartfiles $(LIBDIR) -Wl,-z,max-page-size=128,-Map=$(BUILDDIR)/$(PROJECT).map,--cref,--no-warn-mismatch,--library-path=$(RULESPATH),--script=$(LDSCRIPT) $(LDOPT)
 
 OUTFILES := $(BUILDDIR)/$(PROJECT).elf \
@@ -204,11 +209,11 @@ $(ASMXOBJS) : $(OBJDIR)/%.o : %.S Makefile
 	@echo Assembling $(<F)
 	@$(CC) -c $(ASXFLAGS) -I. $(INCDIR) $< -o $@
 
-$(COBJS) : $(OBJDIR)/%.o : %.c Makefile
+$(COBJS) : $(OBJDIR)/%.o : %.c Makefile $(PROJECT_ROOT)/config.mk
 	@echo Compiling $(<F)
 	@$(CC) -c $(CFLAGS) -I. $(INCDIR) $< -o $@
 
-$(CXXOBJS) : $(OBJDIR)/%.o : %.cc Makefile
+$(CXXOBJS) : $(OBJDIR)/%.o : %.cc Makefile $(PROJECT_ROOT)/config.mk
 	@echo Compiling $(<F)
 	@$(CXXC) -c $(CXXFLAGS) -I. $(INCDIR) $< -o $@
 
@@ -272,3 +277,5 @@ wasm:
 		-o $(WASMDIR)/$(PROJECT).html
 	@sed -i.bak 's/value=0.5 step=0.01 id="VolumeSlider"/value=0.05 step=0.01 id="VolumeSlider"/' $(WASMDIR)/$(PROJECT).html && rm -f $(WASMDIR)/$(PROJECT).html.bak
 	@echo Done
+
+-include $(wildcard $(OBJDIR)/*.d)

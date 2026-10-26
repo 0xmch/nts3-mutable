@@ -33,18 +33,36 @@
 
 #include "stmlib/dsp/dsp.h"
 #include "stmlib/dsp/filter.h"
+#include "stmlib/utils/buffer_allocator.h"
 
+#include "warps/dsp/rate.h"
 #include "warps/dsp/sample_rate_converter.h"
 #include "warps/resources.h"
 
 namespace warps {
 
 const int32_t kNumBands = 20;
+// nts3-mutable: decimation per group, from Warps' rate (dsp/rate.h). At
+// 48 kHz the groups run at 24 and 8 kHz, so the top bands of each group keep
+// their distance from its Nyquist frequency (upstream: 32 and 8 kHz), and the
+// converters keep upstream's latencies (sample_rate_conversion_filters.h).
+#if WARPS_SAMPLE_RATE == 48000
+const int32_t kLowFactor = 3;
+const int32_t kMidFactor = 2;
+const int32_t kLowFilterSize = 36;
+const int32_t kMidFilterSize = 18;
+#else
 const int32_t kLowFactor = 4;
 const int32_t kMidFactor = 3;
+const int32_t kLowFilterSize = 48;
+const int32_t kMidFilterSize = 36;
+#endif
 const int32_t kDelayLineSize = 6144;
 const int32_t kMaxFilterBankBlockSize = 96;
 const int32_t kSampleMemorySize = kMaxFilterBankBlockSize * kNumBands / 2;
+// nts3-mutable: the floats a FilterBank takes from its allocator (Init).
+const int32_t kFilterBankBufferSize =
+    2 * kMaxFilterBankBlockSize + kSampleMemorySize + kDelayLineSize;
 
 class PooledDelayLine {
  public:
@@ -89,7 +107,7 @@ class FilterBank {
  public:
   FilterBank() { }
   ~FilterBank() { }
-  void Init(float sample_rate);
+  void Init(float sample_rate, stmlib::BufferAllocator* allocator);
   void Analyze(const float* in, size_t size);
   void Synthesize(float* out, size_t size);
   const Band& band(int32_t index) {
@@ -97,14 +115,16 @@ class FilterBank {
   }
   
  private:
-  SampleRateConverter<SRC_DOWN, kMidFactor, 36> mid_src_down_;
-  SampleRateConverter<SRC_UP, kMidFactor, 36> mid_src_up_;
-  SampleRateConverter<SRC_DOWN, kLowFactor, 48> low_src_down_;
-  SampleRateConverter<SRC_UP, kLowFactor, 48> low_src_up_;
+  SampleRateConverter<SRC_DOWN, kMidFactor, kMidFilterSize> mid_src_down_;
+  SampleRateConverter<SRC_UP, kMidFactor, kMidFilterSize> mid_src_up_;
+  SampleRateConverter<SRC_DOWN, kLowFactor, kLowFilterSize> low_src_down_;
+  SampleRateConverter<SRC_UP, kLowFactor, kLowFilterSize> low_src_up_;
   
-  float tmp_[2][kMaxFilterBankBlockSize];
-  float samples_[kSampleMemorySize];
-  float delay_buffer_[kDelayLineSize];
+  // nts3-mutable: the buffers come from an allocator (on the NTS-3, the
+  // unit's SDRAM; the rest of the state stays in the unit's own RAM).
+  float* tmp_[2];
+  float* samples_;
+  float* delay_buffer_;
   
   Band band_[kNumBands + 1];
   

@@ -36,6 +36,7 @@
 #include "warps/dsp/oscillator.h"
 #include "warps/dsp/parameters.h"
 #include "warps/dsp/quadrature_oscillator.h"
+#include "warps/dsp/rate.h"
 #include "warps/dsp/quadrature_transform.h"
 #include "warps/dsp/sample_rate_converter.h"
 #include "warps/dsp/vocoder.h"
@@ -45,7 +46,34 @@ namespace warps {
 
 const size_t kMaxBlockSize = 96;
 const size_t kOversampling = 6;
+// nts3-mutable: the cross-modulation converters' length, from Warps' rate
+// (dsp/rate.h; see sample_rate_conversion_filters.h).
+#if WARPS_SAMPLE_RATE == 48000
+const size_t kXmodFilterSize = 108;
+// The longer converters delay the cross-modulation output by 17.8 samples,
+// against 7.8 at 96 kHz (3.9 at 48 kHz). In the transition to the vocoder,
+// where the raw modulator is mixed back in, the modulator is delayed by the
+// difference, so the two keep upstream's offset (a comb notch at 6.1 kHz).
+const size_t kTransitionDelay = 14;
+#else
+const size_t kXmodFilterSize = 48;
+#endif
 const size_t kNumOscillators = 1;
+
+// nts3-mutable: the floats a Modulator takes from its allocator (Init).
+const size_t kModulatorBufferSize =
+    4 * kMaxBlockSize +  // internal_modulation_, buffer_
+#if WARPS_SAMPLE_RATE == 48000
+    kTransitionDelay + kMaxBlockSize +  // transition_modulator_
+#endif
+    2 * kMaxBlockSize * kOversampling +  // src_buffer_
+    kVocoderBufferSize;
+
+// nts3-mutable: 0 drops the easter egg (frequency shifter) from Process(),
+// for builds that never enable it; ProcessEasterEgg() stays available.
+#ifndef WARPS_PROCESS_EASTER_EGG
+#define WARPS_PROCESS_EASTER_EGG 1
+#endif
 
 typedef struct { short l; short r; } ShortFrame;
 typedef struct { float l; float r; } FloatFrame;
@@ -72,7 +100,7 @@ class SaturatingAmplifier {
     for (size_t i = 0; i < size; ++i) {
       float s = static_cast<float>(*in) / 32768.0f;
       float error = s * s - level;
-      level += error * (error > 0.0f ? 0.1f: 0.0001f);
+      level += error * (error > 0.0f ? WARPS_ONE_POLE(0.1f) : WARPS_ONE_POLE(0.0001f));
       s *= level <= 0.0001f ? (1.0f / 0.0001f) * level : 1.0f;
       out[i] = s;
       out_raw[i] += s * drive_modulation.Next();
@@ -140,7 +168,7 @@ class Modulator {
   Modulator() { }
   ~Modulator() { }
 
-  void Init(float sample_rate);
+  void Init(float sample_rate, stmlib::BufferAllocator* allocator);
   void Process(ShortFrame* input, ShortFrame* output, size_t size);
   void ProcessEasterEgg(ShortFrame* input, ShortFrame* output, size_t size);
   inline Parameters* mutable_parameters() { return &parameters_; }
@@ -216,15 +244,22 @@ class Modulator {
   Oscillator vocoder_oscillator_;
   QuadratureOscillator quadrature_oscillator_;
   
-  SampleRateConverter<SRC_UP, kOversampling, 48> src_up_[2];
-  SampleRateConverter<SRC_DOWN, kOversampling, 48> src_down_;
+  SampleRateConverter<SRC_UP, kOversampling, kXmodFilterSize> src_up_[2];
+  SampleRateConverter<SRC_DOWN, kOversampling, kXmodFilterSize> src_down_;
 
   Vocoder vocoder_;
   QuadratureTransform quadrature_transform_[2];
   
-  float internal_modulation_[kMaxBlockSize];
-  float buffer_[3][kMaxBlockSize];
-  float src_buffer_[2][kMaxBlockSize * kOversampling];
+  // nts3-mutable: the buffers come from an allocator (on the NTS-3, the
+  // unit's SDRAM; the rest of the state stays in the unit's own RAM).
+  float* internal_modulation_;
+  float* buffer_[3];
+#if WARPS_SAMPLE_RATE == 48000
+  // nts3-mutable: the delayed modulator (kTransitionDelay samples of history,
+  // then the current block).
+  float* transition_modulator_;
+#endif
+  float* src_buffer_[2];
 
   float feedback_sample_;
   

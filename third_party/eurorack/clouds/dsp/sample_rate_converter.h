@@ -30,6 +30,7 @@
 #define CLOUDS_DSP_SAMPLE_RATE_CONVERTER_H_
 
 #include "stmlib/stmlib.h"
+#include "stmlib/utils/buffer_allocator.h"
 
 #include "clouds/dsp/frame.h"
 
@@ -41,7 +42,15 @@ class SampleRateConverter {
   SampleRateConverter() { }
   ~SampleRateConverter() { }
  
-  void Init() {
+  // nts3-mutable: the coefficients and the history (kBufferBytes) come from
+  // an allocator (on the NTS-3, the unit's SDRAM); the history's position
+  // stays in the object.
+  static const size_t kBufferBytes =
+      sizeof(float) * filter_size + sizeof(FloatFrame) * filter_size * 2;
+
+  void Init(stmlib::BufferAllocator* allocator) {
+    coefficients_ = allocator->Allocate<float>(filter_size);
+    history_ = allocator->Allocate<FloatFrame>(filter_size * 2);
     for (int32_t i = 0; i < filter_size * 2; ++i) {
       history_[i].l = history_[i].r = 0.0f;
     }
@@ -84,8 +93,8 @@ class SampleRateConverter {
   }
  
  private:
-  float coefficients_[filter_size];
-  FloatFrame history_[filter_size * 2];
+  float* coefficients_;
+  FloatFrame* history_;
   int32_t history_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(SampleRateConverter);

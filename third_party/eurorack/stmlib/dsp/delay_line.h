@@ -41,7 +41,14 @@ class DelayLine {
  public:
   DelayLine() { }
   ~DelayLine() { }
-  
+
+  // nts3-mutable: the samples (max_delay of them) live in memory handed over
+  // once with set_line(), before Init(): on the NTS-3, the unit's SDRAM, while
+  // the indices stay in the object, in the unit's own RAM.
+  void set_line(T* line) {
+    line_ = line;
+  }
+
   void Init() {
     Reset();
   }
@@ -107,7 +114,7 @@ class DelayLine {
  private:
   size_t write_ptr_;
   size_t delay_;
-  T line_[max_delay];
+  T* line_;
   
   DISALLOW_COPY_AND_ASSIGN(DelayLine);
 };

@@ -38,6 +38,14 @@
 
 #include "unit_genericfx.h"
 
+// Metered diagnostic builds (units/common/meter.h) take their own unit ID, so
+// the device lists them next to the regular unit instead of merging the two.
+#ifdef NTS3_METER
+#define UNIT_ID(id) ((id) | 0x40U)
+#else
+#define UNIT_ID(id) (id)
+#endif
+
 #ifndef WARPS_SHIFTER
 #define WARPS_SHIFTER 0
 #endif
@@ -52,7 +60,7 @@ const __unit_header genericfx_unit_header_t unit_header = {
     .api = UNIT_API_VERSION,
     .dev_id = 0x30784D43U,  // '0xMC'
 #if WARPS_SHIFTER
-    .unit_id = 0x6U,
+    .unit_id = UNIT_ID(0x6U),
     .version = 0x00010000U,
     .name = "Freq Shifter",
     .num_params = 5,
@@ -75,7 +83,7 @@ const __unit_header genericfx_unit_header_t unit_header = {
     NO_MAPPING, NO_MAPPING, NO_MAPPING
   }
 #else
-    .unit_id = 0x5U,
+    .unit_id = UNIT_ID(0x5U),
     .version = 0x00010000U,
     .name = "Meta Mod",
     .num_params = 7,

@@ -22,7 +22,10 @@ FLAGS := -O3 $(UWASMDEFS) -include ../host/stubs/host_attributes.h \
 LINK := -sSTANDALONE_WASM --no-entry -sINITIAL_MEMORY=8MB -sSTACK_SIZE=128KB \
         -sALLOW_MEMORY_GROWTH=0 -sFILESYSTEM=0
 
-units/$(UNIT).wasm: $(CSRCS) $(CXXSRCS) $(wildcard $(EFFECT_DIR)*.h) Makefile
+# Any header or generated table of the units or the vendored code.
+HEADERS := $(shell find ../units ../third_party -name '*.h' -o -name '*.inc')
+
+units/$(UNIT).wasm: $(CSRCS) $(CXXSRCS) $(HEADERS) $(PROJECT_ROOT)/config.mk Makefile
 	@mkdir -p units build/$(UNIT)
 	@for f in $(CSRCS); do emcc -std=c11 $(FLAGS) -c $$f -o build/$(UNIT)/$$(basename $$f .c).o || exit 1; done
 	@for f in $(CXXSRCS); do emcc -std=c++17 -fno-exceptions -fno-rtti $(FLAGS) -c $$f -o build/$(UNIT)/$$(basename $$f .cc).o || exit 1; done

@@ -5,9 +5,18 @@
 // dry signal never leaves 48 kHz: Clouds runs fully wet and the dry/wet
 // crossfade (Clouds' own equal-power law) happens here.
 //
-// Pad: X = position, Y = size, depth = dry/wet. Touching the pad freezes the
-// buffer and fires Clouds' trigger input; releasing it unfreezes. The playback
-// mode (granular, stretch, looping delay) is fixed per unit by TEXTURE_MODE.
+// Pad: X = position, Y = size, depth = dry/wet. Touching the pad fires Clouds'
+// trigger input and holds its gate. The NTS-3 calls the effect all the time
+// and always adds its output, but crossfades its input to silence when the
+// effect is off (pad up, after the release time). So that Clouds still holds
+// the last second of audio when the pad goes down, as on the module, it
+// records the firmware's raw input (get_raw_input, meant for this
+// pre-buffering) while the effect is off, and its wet output is muted then.
+// "On" is the pad touched, or the routing itself (routed input within 60 dB
+// of the raw one), so Hold, freeze and the release time behave as the
+// firmware sets them. Without a raw input (host, web page) it is always on.
+// The playback mode (granular, stretch, looping delay) is fixed per unit by
+// TEXTURE_MODE.
 
 #pragma once
 
@@ -20,6 +29,7 @@
 #include "clouds/dsp/granular_processor.h"
 #include "clouds/resources.h"
 #include "stmlib/dsp/dsp.h"
+#include "stmlib/utils/buffer_allocator.h"
 
 #include "../common/mi_glue.h"
 
@@ -40,6 +50,21 @@ constexpr size_t kBlock = clouds::kMaxBlockSize;  // 32 frames at 32 kHz
 // so the upsampler never runs dry while the next block fills.
 constexpr size_t kFifoPrefill = kBlock + 2;
 constexpr size_t kFifoSize = 128;
+
+// Plain sample buffers, in SDRAM with Clouds' own (Effect::kSdramBytes).
+struct Buffers {
+  float down[mi_glue::Downsampler::kStorageSize];
+  float up[mi_glue::Upsampler::kStorageSize];
+  clouds::ShortFrame block_in[kBlock];
+  clouds::ShortFrame block_out[kBlock];
+  float fifo_l[kFifoSize];
+  float fifo_r[kFifoSize];
+};
+
+// Clouds' state, in the unit's own RAM (see Effect::kSdramBytes), zeroed at
+// init.
+alignas(clouds::GranularProcessor) static uint8_t
+    processor_storage[sizeof(clouds::GranularProcessor)];
 }  // namespace texture
 
 class Effect : public Processor {
@@ -56,21 +81,36 @@ class Effect : public Processor {
     NUM_PARAMS
   };
 
+  // SDRAM: Clouds' recording buffers and work buffers, the resamplers', block
+  // and FIFO buffers, and the tables. The GranularProcessor itself (the grains
+  // and the other state) lives in the unit's own RAM: on the NTS-3, parts of
+  // state written to SDRAM did not read back (part of a word, now and then),
+  // and every published NTS-3 unit, Korg's included, keeps its DSP objects in
+  // static RAM and only plain sample buffers in SDRAM.
   static constexpr size_t kSdramBytes =
-      texture::Align(sizeof(clouds::GranularProcessor)) +
+      texture::Align(clouds::kGranularProcessorBufferBytes) +
+      texture::Align(sizeof(texture::Buffers)) +
       texture::Align(texture::kLargeBufferSize) +
       texture::Align(texture::kSmallBufferSize) +
       texture::Align(LUT_SIN_SIZE * sizeof(float)) +
-      texture::Align(LUT_WINDOW_SIZE * sizeof(float));
+      texture::Align(LUT_WINDOW_SIZE * sizeof(float)) +
+      texture::Align(mi_glue::kProtoTaps * sizeof(float));
 
   uint32_t getBufferSize() const override final {
     return (kSdramBytes + sizeof(float) - 1) / sizeof(float);
   }
 
   void init(float* allocated_buffer) override final {
+    // Clouds relies on its state starting at zero (as in the module's RAM);
+    // the unit's static RAM is not cleared when it loads.
+    std::fill(&texture::processor_storage[0],
+              &texture::processor_storage[sizeof(texture::processor_storage)], 0);
+    processor_ = new (texture::processor_storage) clouds::GranularProcessor();
     uint8_t* p = reinterpret_cast<uint8_t*>(allocated_buffer);
-    processor_ = new (p) clouds::GranularProcessor();
-    p += texture::Align(sizeof(clouds::GranularProcessor));
+    stmlib::BufferAllocator allocator(p, clouds::kGranularProcessorBufferBytes);
+    p += texture::Align(clouds::kGranularProcessorBufferBytes);
+    b_ = reinterpret_cast<texture::Buffers*>(p);
+    p += texture::Align(sizeof(texture::Buffers));
     uint8_t* large = p;
     p += texture::Align(texture::kLargeBufferSize);
     uint8_t* small = p;
@@ -88,9 +128,10 @@ class Effect : public Processor {
       window[i] = s * s;
     }
     clouds::lut_window = window;
+    p += texture::Align(LUT_WINDOW_SIZE * sizeof(float));
 
     processor_->Init(large, texture::kLargeBufferSize, small,
-                     texture::kSmallBufferSize);
+                     texture::kSmallBufferSize, &allocator);
     processor_->set_silence(false);
     processor_->set_bypass(false);
     // Clouds' quality: 0 is 16-bit stereo; 3 (Texture Lo-Fi) is mono, 8-bit
@@ -99,10 +140,12 @@ class Effect : public Processor {
     processor_->set_playback_mode(
         static_cast<clouds::PlaybackMode>(TEXTURE_MODE));
 
-    float prototype[mi_glue::kProtoTaps];
+    // The resampler prototype is only needed here, but it goes in SDRAM: unit
+    // callbacks run on the firmware's stack, which has no room for it.
+    float* prototype = reinterpret_cast<float*>(p);
     mi_glue::DesignPrototype(prototype);
-    down_.Init(prototype);
-    up_.Init(prototype);
+    down_.Init(prototype, b_->down);
+    up_.Init(prototype, b_->up);
 
     for (int i = 0; i < NUM_PARAMS; ++i) {
       setParameter(i, unit_header.common.params[i].init);
@@ -118,16 +161,25 @@ class Effect : public Processor {
     reset();
   }
 
-  void teardown() override final { processor_ = nullptr; }
+  // The firmware's raw input (unit_runtime_genericfx_context_t), or null.
+  void setRawInput(unit_runtime_genericfx_get_raw_input_ptr get_raw_input) {
+    get_raw_input_ = get_raw_input;
+  }
+
+  void teardown() override final {
+    processor_ = nullptr;
+    b_ = nullptr;
+  }
 
   void reset() override final {
+    if (!b_) return;
     n_in_ = 0;
     fifo_read_ = 0;
     fifo_write_ = texture::kFifoPrefill;
-    std::fill(&fifo_l_[0], &fifo_l_[texture::kFifoSize], 0.0f);
-    std::fill(&fifo_r_[0], &fifo_r_[texture::kFifoSize], 0.0f);
+    std::fill(&b_->fifo_l[0], &b_->fifo_l[texture::kFifoSize], 0.0f);
+    std::fill(&b_->fifo_r[0], &b_->fifo_r[texture::kFifoSize], 0.0f);
     touching_ = false;
-    trigger_pending_ = false;
+    __atomic_store_n(&trigger_pending_, false, __ATOMIC_RELEASE);
   }
 
   void process(const float* __restrict in, float* __restrict out,
@@ -136,11 +188,24 @@ class Effect : public Processor {
       std::copy(in, in + 2 * frames, out);
       return;
     }
-    for (uint32_t i = 0; i < frames; ++i, in += 2, out += 2) {
+    // Valid for this call only (unit_genericfx.h).
+    const float* raw = get_raw_input_ ? get_raw_input_() : nullptr;
+    if (raw) {
+      float routed = 0.0f, unrouted = 0.0f;
+      for (uint32_t i = 0; i < 2 * frames; ++i) {
+        routed += in[i] * in[i];
+        unrouted += raw[i] * raw[i];
+      }
+      // Silence on both says nothing about the routing: keep the last state.
+      if (unrouted > 1e-12f) routed_on_ = routed > 1e-6f * unrouted;
+    }
+    const float* rec = raw && !routed_on_ ? raw : in;
+    const float wet_target = !raw || routed_on_ || touching_ ? 1.0f : 0.0f;
+    for (uint32_t i = 0; i < frames; ++i, in += 2, rec += 2, out += 2) {
       float l, r;
-      if (down_.Process(in[0], in[1], &l, &r)) {
-        block_in_[n_in_].l = ToShort(l);
-        block_in_[n_in_].r = ToShort(r);
+      if (down_.Process(rec[0], rec[1], &l, &r)) {
+        b_->block_in[n_in_].l = ToShort(l);
+        b_->block_in[n_in_].r = ToShort(r);
         if (++n_in_ == texture::kBlock) {
           n_in_ = 0;
           RenderBlock();
@@ -148,8 +213,8 @@ class Effect : public Processor {
       }
       float wet_l = 0.0f, wet_r = 0.0f;
       if (up_.needed()) {
-        wet_l = fifo_l_[fifo_read_];
-        wet_r = fifo_r_[fifo_read_];
+        wet_l = b_->fifo_l[fifo_read_];
+        wet_r = b_->fifo_r[fifo_read_];
         fifo_read_ = (fifo_read_ + 1) % texture::kFifoSize;
       }
       up_.Process(wet_l, wet_r, &wet_l, &wet_r);
@@ -167,8 +232,9 @@ class Effect : public Processor {
       float fade_out = stmlib::Interpolate(clouds::lut_xfade_out, mix_, 16.0f);
       const float kSqrt2 = 1.4142136f;
       const float kWetScale = 2.828427f;
-      wet_l = SoftKnee(kWetScale * wet_l);
-      wet_r = SoftKnee(kWetScale * wet_r);
+      wet_gain_ += 0.004f * (wet_target - wet_gain_);  // about 5 ms
+      wet_l = wet_gain_ * SoftKnee(kWetScale * wet_l);
+      wet_r = wet_gain_ * SoftKnee(kWetScale * wet_r);
       out[0] = Clamp(kSqrt2 * (in[0] * fade_out + wet_l * fade_in));
       out[1] = Clamp(kSqrt2 * (in[1] * fade_out + wet_r * fade_in));
     }
@@ -201,7 +267,7 @@ class Effect : public Processor {
     switch (phase) {
       case k_unit_touch_phase_began:
         touching_ = true;
-        trigger_pending_ = true;
+        __atomic_store_n(&trigger_pending_, true, __ATOMIC_RELEASE);
         break;
       case k_unit_touch_phase_ended:
       case k_unit_touch_phase_cancelled:
@@ -249,30 +315,30 @@ class Effect : public Processor {
     p->stereo_spread = 0.5f;
     p->feedback = feedback_;
     p->reverb = reverb_;
-    p->freeze = touching_;
-    p->trigger = trigger_pending_;
+    p->freeze = false;
+    // Taken in one exchange: a touch arriving meanwhile is not lost.
+    p->trigger = __atomic_exchange_n(&trigger_pending_, false, __ATOMIC_ACQ_REL);
     p->gate = touching_;
-    trigger_pending_ = false;
 
     processor_->Prepare();
-    processor_->Process(block_in_, block_out_, texture::kBlock);
+    processor_->Process(b_->block_in, b_->block_out, texture::kBlock);
 
     for (size_t i = 0; i < texture::kBlock; ++i) {
-      fifo_l_[fifo_write_] = block_out_[i].l / 32768.0f;
-      fifo_r_[fifo_write_] = block_out_[i].r / 32768.0f;
+      b_->fifo_l[fifo_write_] = b_->block_out[i].l / 32768.0f;
+      b_->fifo_r[fifo_write_] = b_->block_out[i].r / 32768.0f;
       fifo_write_ = (fifo_write_ + 1) % texture::kFifoSize;
     }
   }
 
   clouds::GranularProcessor* processor_ = nullptr;
+  unit_runtime_genericfx_get_raw_input_ptr get_raw_input_ = nullptr;
+  bool routed_on_ = true;   // the firmware routes the input to the effect
+  float wet_gain_ = 1.0f;   // follows routed_on_ when there is a raw input
   mi_glue::Downsampler down_;
   mi_glue::Upsampler up_;
 
-  clouds::ShortFrame block_in_[texture::kBlock];
-  clouds::ShortFrame block_out_[texture::kBlock];
+  texture::Buffers* b_ = nullptr;
   size_t n_in_ = 0;
-  float fifo_l_[texture::kFifoSize];
-  float fifo_r_[texture::kFifoSize];
   size_t fifo_read_ = 0;
   size_t fifo_write_ = 0;
 
@@ -286,7 +352,7 @@ class Effect : public Processor {
   float target_feedback_ = 0.0f;
   float target_reverb_ = 0.0f;
   volatile bool touching_ = false;
-  volatile bool trigger_pending_ = false;
+  bool trigger_pending_ = false;  // set by touchEvent, taken by RenderBlock
 
   float position_ = 0.0f;
   float size_ = 0.5f;

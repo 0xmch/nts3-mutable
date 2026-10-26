@@ -43,7 +43,14 @@ class Plucker {
  public:
   Plucker() { }
   ~Plucker() { }
-  
+
+  // nts3-mutable: the comb filter's samples (kCombFilterSize floats), set
+  // once before Init().
+  enum { kCombFilterSize = 256 };
+  void set_buffer(float* buffer) {
+    comb_filter_.set_line(buffer);
+  }
+
   void Init() {
     svf_.Init();
     comb_filter_.Init();
@@ -80,7 +87,7 @@ class Plucker {
 
  private:
   stmlib::Svf svf_;
-  stmlib::DelayLine<float, 256> comb_filter_;
+  stmlib::DelayLine<float, kCombFilterSize> comb_filter_;
   size_t remaining_samples_;
   float comb_filter_period_;
   float comb_filter_gain_;

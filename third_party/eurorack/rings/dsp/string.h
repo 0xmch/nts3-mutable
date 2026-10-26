@@ -97,7 +97,14 @@ class String {
  public:
   String() { }
   ~String() { }
-  
+
+  // nts3-mutable: the delay lines' samples (kDelayLineSize and
+  // kDelayLineSize / 2 floats), set once before Init().
+  void set_buffers(float* string, float* stretch) {
+    string_.set_line(string);
+    stretch_.set_line(stretch);
+  }
+
   void Init(bool enable_dispersion);
   void Process(const float* in, float* out, float* aux, size_t size);
   
